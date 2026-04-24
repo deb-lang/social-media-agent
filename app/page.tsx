@@ -236,7 +236,7 @@ export default function DashboardHome() {
               </h3>
             </div>
             <div className="big">Bi-monthly</div>
-            <div className="sub">2 posts per run · 1st & 15th</div>
+            <div className="sub">2 posts per run · 1st &amp; 15th</div>
             <hr />
             <div className="slots-label">Publish slots</div>
             <div className="slots">Tue 9:00 AM · Thu 10:00 AM PST</div>

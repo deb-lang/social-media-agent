@@ -254,7 +254,7 @@ export default function SettingsPage() {
         <div className="fl">
           <div className="n">6</div>
           <h4>Slack alert</h4>
-          <p>"N posts ready for review" fires with a /queue deep link.</p>
+          <p>&ldquo;N posts ready for review&rdquo; fires with a /queue deep link.</p>
         </div>
         <div className="fl">
           <div className="n">7</div>

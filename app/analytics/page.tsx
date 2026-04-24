@@ -119,7 +119,7 @@ export default function AnalyticsPage() {
   return (
     <section className="section container">
       <span className="tag-eyebrow">Post analytics · / analytics</span>
-      <div className="mini">What's working</div>
+      <div className="mini">What&apos;s working</div>
       <h2 className="page-title">
         Real results. <span className="accent">Real impact.</span>
       </h2>
@@ -229,7 +229,7 @@ export default function AnalyticsPage() {
                         <div className={`rank ${i === 0 ? "top" : ""}`}>{i + 1}</div>
                         <div>
                           <div className="lb-title">
-                            "{p.caption.split("\n")[0].slice(0, 80)}…"
+                            &ldquo;{p.caption.split("\n")[0].slice(0, 80)}…&rdquo;
                           </div>
                           <div className="lb-meta">
                             {p.format} · {CATEGORY_LABEL[p.category] ?? p.category}
@@ -262,7 +262,7 @@ export default function AnalyticsPage() {
                       <path d="M12 2v20M2 12h20" />
                     </svg>
                   </span>
-                  Format & category mix
+                  Format &amp; category mix
                 </h3>
                 <span className="card-meta">Last 30 days</span>
               </div>
