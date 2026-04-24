@@ -4,13 +4,5 @@
     { "path": "/api/generate", "schedule": "0 16 1,15 * *" },
     { "path": "/api/analytics/sync", "schedule": "0 18 * * 1-5" },
     { "path": "/api/recycle/scan", "schedule": "0 16 20 * *" }
-  ],
-  "functions": {
-    "app/api/generate/route.ts": { "maxDuration": 300 },
-    "app/api/posts/[id]/regenerate/route.ts": { "maxDuration": 300 },
-    "app/api/posts/[id]/approve/route.ts": { "maxDuration": 120 },
-    "app/api/posts/batch-approve/route.ts": { "maxDuration": 300 },
-    "app/api/analytics/sync/route.ts": { "maxDuration": 300 },
-    "app/api/recycle/scan/route.ts": { "maxDuration": 300 }
-  }
+  ]
 }
