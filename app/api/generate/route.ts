@@ -12,7 +12,7 @@
 // Cron invocations include `x-cron-secret: $CRON_SECRET`.
 // Manual invocations (from the dashboard) skip the header check.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase";
 import { refreshResourceCache } from "@/lib/scraper";
@@ -77,11 +77,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Kick off async work without awaiting — response returns in <100ms
-  runGeneration(run_id).catch((err) => {
-    console.error("[generate] fatal:", err);
-    notifyFailure({ context: "generation.run", error: err, runId: run_id }).catch(() => {});
-    void markRunFailed(run_id, err);
+  // CRITICAL: Vercel terminates the function container the instant the
+  // response is returned. A bare `runGeneration(run_id).catch(...)` is a
+  // ghost — never actually runs. `after()` from next/server keeps the
+  // function alive until the promise settles. The dashboard polls
+  // /api/runs/[id] for live status (run row updates throughout).
+  after(async () => {
+    try {
+      await runGeneration(run_id);
+    } catch (err) {
+      console.error("[generate] fatal:", err);
+      try {
+        await notifyFailure({ context: "generation.run", error: err, runId: run_id });
+      } catch {
+        /* swallow — Slack should never block error path */
+      }
+      await markRunFailed(run_id, err);
+    }
   });
 
   return NextResponse.json({ run_id, status: "in_progress" });
