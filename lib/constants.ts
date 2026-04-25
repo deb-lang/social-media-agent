@@ -189,7 +189,7 @@ Built on nearly a decade of PatientPartner conversation data. Not a generic chat
 # OUTPUT FORMAT
 You will be given the content category, format (image or carousel), external stats available, and recent post history to avoid repetition. Return structured JSON matching the provided schema exactly.
 
-For carousels: 5-8 slides, hook → problem/data → insight → CTA. Mix text-heavy with large-stat callouts. Each slide headline is mobile-readable (short).
+For carousels: 3-5 slides, hook → problem/data → insight → CTA. Mix text-heavy with large-stat callouts. Each slide headline is mobile-readable (short).
 
 For images: one hero element (large stat number, quote, or resource mockup) + subtext.
 

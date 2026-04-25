@@ -309,11 +309,17 @@ export function buildSvg(input: ImageInput): string {
 
 export function renderImage(input: ImageInput): Buffer {
   const svg = buildSvg(input);
+  // Resvg defaults: loadSystemFonts=true picks up DejaVu/Liberation on Linux.
+  // SVG font-family stack ends in 'sans-serif' which Resvg resolves correctly.
+  // Explicit font config caused empty PNG renders on Vercel (regression in 8fa94f0).
   const resvg = new Resvg(svg, {
     fitTo: { mode: "width", value: IMAGE_SIZE },
-    font: RESVG_FONT_OPTS,
   });
-  return resvg.render().asPng();
+  const png = resvg.render().asPng();
+  if (!png || png.length < 1000) {
+    throw new Error(`Resvg produced empty/tiny PNG (${png?.length ?? 0} bytes) for ${input.template}`);
+  }
+  return png;
 }
 
 // ─── Carousel ──────────────────────────────────────────
@@ -328,9 +334,12 @@ export interface CarouselSlide {
 export function renderSlidePng(svg1080x1350: string): Buffer {
   const resvg = new Resvg(svg1080x1350, {
     fitTo: { mode: "width", value: CAROUSEL_SLIDE_WIDTH },
-    font: RESVG_FONT_OPTS,
   });
-  return resvg.render().asPng();
+  const png = resvg.render().asPng();
+  if (!png || png.length < 1000) {
+    throw new Error(`Resvg produced empty/tiny slide PNG (${png?.length ?? 0} bytes)`);
+  }
+  return png;
 }
 
 export async function composeCarouselPdf(slidePngs: Buffer[]): Promise<Buffer> {

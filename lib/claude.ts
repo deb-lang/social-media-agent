@@ -192,7 +192,7 @@ function buildUserMessage(ctx: GenerationContext): string {
 
   parts.push(`\n# OUTPUT`);
   parts.push(
-    `Return structured JSON matching the provided schema. For carousels, produce 5-8 slides that mix the two templates (dark_navy for stats, light_teal for quotes/insight). Reference only stat IDs from the approved list above. Set stat_verified=true only when the source has a URL.`
+    `Return structured JSON matching the provided schema. For carousels, produce 3-5 slides that mix the two templates (dark_navy for stats, light_teal for quotes/insight). Reference only stat IDs from the approved list above. Set stat_verified=true only when the source has a URL.`
   );
 
   return parts.join("\n");
@@ -217,6 +217,8 @@ export async function generateImagePost(ctx: GenerationContext): Promise<{
   cacheHits: { read: number; create: number };
 }> {
   if (ctx.format !== "image") throw new Error("generateImagePost requires format='image'");
+  console.log(`[claude:image] starting · category=${ctx.category} · approved_stats=${ctx.approvedStats.length} · external=${ctx.externalStats?.length ?? 0}`);
+  const t0 = Date.now();
   const res = await client().messages.parse({
     model: CLAUDE_MODEL,
     max_tokens: 4096,
@@ -228,10 +230,11 @@ export async function generateImagePost(ctx: GenerationContext): Promise<{
     system: systemBlocks(),
     messages: [{ role: "user", content: buildUserMessage(ctx) }],
   } as Anthropic.MessageCreateParamsNonStreaming);
+  console.log(`[claude:image] returned in ${((Date.now() - t0)/1000).toFixed(1)}s · stop=${res.stop_reason} · parsed=${res.parsed_output ? 'ok' : 'NULL'} · in=${res.usage?.input_tokens} out=${res.usage?.output_tokens}`);
 
   // The SDK's zodOutputFormat auto-parses res.parsed_output as the Zod type.
   if (!res.parsed_output) {
-    throw new Error("Claude returned no parsed_output for image post");
+    throw new Error(`Claude returned no parsed_output for image post (stop_reason=${res.stop_reason})`);
   }
   const parsed = res.parsed_output as ImagePost;
   return {
@@ -250,11 +253,13 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
   if (ctx.format !== "carousel") throw new Error("generateCarouselPost requires format='carousel'");
   // Use messages.parse() (same path as image post) instead of streaming.
   // Streaming added complexity + transient grammar-compilation flakes for
-  // marginal benefit. With slides reduced to 3-5, output fits comfortably
-  // under 4096 tokens. SDK's auto-retry (5x) covers transient 5xx.
+  // marginal benefit. SDK's auto-retry (5x) covers transient 5xx.
+  // max_tokens 8192 needed for 3-5 slides + caption + hashtags + thinking budget.
+  console.log(`[claude:carousel] starting · category=${ctx.category} · approved_stats=${ctx.approvedStats.length} · external=${ctx.externalStats?.length ?? 0}`);
+  const t0 = Date.now();
   const res = await client().messages.parse({
     model: CLAUDE_MODEL,
-    max_tokens: 4096,
+    max_tokens: 8192,
     thinking: { type: "adaptive" },
     output_config: {
       effort: "high",
@@ -263,9 +268,10 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
     system: systemBlocks(),
     messages: [{ role: "user", content: buildUserMessage(ctx) }],
   } as Anthropic.MessageCreateParamsNonStreaming);
+  console.log(`[claude:carousel] returned in ${((Date.now() - t0)/1000).toFixed(1)}s · stop=${res.stop_reason} · parsed=${res.parsed_output ? 'ok' : 'NULL'} · in=${res.usage?.input_tokens} out=${res.usage?.output_tokens}`);
 
   if (!res.parsed_output) {
-    throw new Error("Claude returned no parsed_output for carousel");
+    throw new Error(`Claude returned no parsed_output for carousel (stop_reason=${res.stop_reason})`);
   }
   const parsed = res.parsed_output as CarouselPost;
   return {
