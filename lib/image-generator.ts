@@ -23,10 +23,18 @@ import {
   CAROUSEL_SLIDE_HEIGHT,
 } from "./constants";
 
-// We ship Inter via @fontsource/inter so Resvg has a guaranteed font on
-// Vercel's containers (where system fonts are unreliable). Resvg supports
-// WOFF/WOFF2 directly via fontkit-rs.
+// Ship Poppins (display) + Inter (body fallback) via @fontsource so Resvg has
+// guaranteed fonts on Vercel's containers (where system fonts are unreliable).
+// Resvg reads WOFF/WOFF2 directly via fontkit-rs.
+// Poppins matches the dashboard's --font-display so rendered images and the
+// dashboard share visual identity.
 const FONT_FILES = [
+  // Poppins (primary — display + body)
+  join(process.cwd(), "node_modules/@fontsource/poppins/files/poppins-latin-400-normal.woff2"),
+  join(process.cwd(), "node_modules/@fontsource/poppins/files/poppins-latin-600-normal.woff2"),
+  join(process.cwd(), "node_modules/@fontsource/poppins/files/poppins-latin-700-normal.woff2"),
+  // Inter (fallback — covers any text the Poppins family doesn't, e.g.
+  // smart quotes, monospace numerics)
   join(process.cwd(), "node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2"),
   join(process.cwd(), "node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2"),
   join(process.cwd(), "node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2"),
@@ -35,7 +43,7 @@ const FONT_FILES = [
 const RESVG_FONT_OPTS = {
   loadSystemFonts: false, // skip — system fonts are inconsistent on Vercel
   fontFiles: FONT_FILES,
-  defaultFontFamily: "Inter",
+  defaultFontFamily: "Poppins",
 } as const;
 
 // ─── Logo ───────────────────────────────────────────────
@@ -129,11 +137,11 @@ function buildDarkNavySvg(input: DarkNavyImageInput): string {
       return `
   <rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="12"
     fill="${cardColor}" stroke="${teal}" stroke-width="${opts.strokeWidth}"/>
-  <text x="${x + cardW / 2}" y="${y + 92}" font-family="Inter, sans-serif" font-size="76" font-weight="700" fill="${statFill}" text-anchor="middle">${escapeXml(s.value)}</text>
+  <text x="${x + cardW / 2}" y="${y + 92}" font-family="Poppins, Inter, sans-serif" font-size="76" font-weight="700" fill="${statFill}" text-anchor="middle">${escapeXml(s.value)}</text>
   ${labelLines
     .map(
       (ln, idx) =>
-        `<text x="${x + cardW / 2}" y="${y + 140 + idx * 26}" font-family="Inter, sans-serif" font-size="20" fill="#E0ECF4" text-anchor="middle">${escapeXml(ln)}</text>`
+        `<text x="${x + cardW / 2}" y="${y + 140 + idx * 26}" font-family="Poppins, Inter, sans-serif" font-size="20" fill="#E0ECF4" text-anchor="middle">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
     `.trim();
@@ -162,30 +170,30 @@ function buildDarkNavySvg(input: DarkNavyImageInput): string {
   ${headlineLines
     .map(
       (ln, i) =>
-        `<text x="50" y="${210 + i * 58}" font-family="Inter, sans-serif" font-size="54" font-weight="700" fill="${IMAGE_COLORS.textWhite}">${escapeXml(ln)}</text>`
+        `<text x="50" y="${210 + i * 58}" font-family="Poppins, Inter, sans-serif" font-size="54" font-weight="700" fill="${IMAGE_COLORS.textWhite}">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
-  ${subhead ? `<text x="50" y="${210 + headlineLines.length * 58 + 8}" font-family="Inter, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
+  ${subhead ? `<text x="50" y="${210 + headlineLines.length * 58 + 8}" font-family="Poppins, Inter, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
 
   <!-- Problem label + row -->
-  ${problemLabel ? `<text x="50" y="335" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(problemLabel.toUpperCase())}</text>` : ""}
+  ${problemLabel ? `<text x="50" y="335" font-family="Poppins, Inter, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(problemLabel.toUpperCase())}</text>` : ""}
   ${problemStats && problemStats.length ? renderStatRow(problemStats, problemRowY, { tealStat: false, strokeWidth: 1 }) : ""}
 
   <!-- Solution label + row -->
-  ${solutionLabel ? `<text x="50" y="605" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(solutionLabel.toUpperCase())}</text>` : ""}
+  ${solutionLabel ? `<text x="50" y="605" font-family="Poppins, Inter, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(solutionLabel.toUpperCase())}</text>` : ""}
   ${solutionStats && solutionStats.length ? renderStatRow(solutionStats, solutionRowY, { tealStat: true, strokeWidth: 2.5 }) : ""}
 
   <!-- CTA bar -->
   ${
     cta
       ? `<rect x="50" y="${ctaY}" width="1100" height="100" rx="12" fill="${teal}" opacity="0.12" stroke="${teal}" stroke-width="1"/>
-  <text x="600" y="${ctaY + 42}" font-family="Inter, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="26" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
-  <text x="600" y="${ctaY + 78}" font-family="Inter, sans-serif" fill="${teal}" font-size="20" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
+  <text x="600" y="${ctaY + 42}" font-family="Poppins, Inter, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="26" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
+  <text x="600" y="${ctaY + 78}" font-family="Poppins, Inter, sans-serif" fill="${teal}" font-size="20" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
       : ""
   }
 
   <!-- Footer URL -->
-  ${footer ? `<text x="600" y="${footerY}" font-family="Inter, sans-serif" fill="${teal}" font-size="18" text-anchor="middle" opacity="0.7">${escapeXml(footer)}</text>` : ""}
+  ${footer ? `<text x="600" y="${footerY}" font-family="Poppins, Inter, sans-serif" fill="${teal}" font-size="18" text-anchor="middle" opacity="0.7">${escapeXml(footer)}</text>` : ""}
 </svg>`;
 }
 
@@ -205,15 +213,15 @@ function buildLightTealSvg(input: LightTealImageInput): string {
     const quoteLines = wrapText(quote.text, 44);
     const quoteBlockY = 410;
     body = `
-  <text x="50" y="400" font-family="Inter, sans-serif" font-size="160" font-weight="700" fill="${teal}">&#8220;</text>
+  <text x="50" y="400" font-family="Poppins, Inter, sans-serif" font-size="160" font-weight="700" fill="${teal}">&#8220;</text>
   ${quoteLines
     .map(
       (ln, i) =>
-        `<text x="600" y="${quoteBlockY + 80 + i * 44}" font-family="Inter, sans-serif" font-size="32" font-style="italic" fill="${textDark}" text-anchor="middle">${escapeXml(ln)}</text>`
+        `<text x="600" y="${quoteBlockY + 80 + i * 44}" font-family="Poppins, Inter, sans-serif" font-size="32" font-style="italic" fill="${textDark}" text-anchor="middle">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
-  <text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 40}" font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(quote.attribution)}</text>
-  ${quote.role ? `<text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 70}" font-family="Inter, sans-serif" font-size="20" fill="${textDark}" text-anchor="middle">${escapeXml(quote.role)}</text>` : ""}
+  <text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 40}" font-family="Poppins, Inter, sans-serif" font-size="22" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(quote.attribution)}</text>
+  ${quote.role ? `<text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 70}" font-family="Poppins, Inter, sans-serif" font-size="20" fill="${textDark}" text-anchor="middle">${escapeXml(quote.role)}</text>` : ""}
     `;
   } else if (kind === "announcement" || kind === "feature") {
     const headlineLines = headline ? wrapText(headline, 26).slice(0, 2) : [];
@@ -221,10 +229,10 @@ function buildLightTealSvg(input: LightTealImageInput): string {
   ${headlineLines
     .map(
       (ln, i) =>
-        `<text x="50" y="${230 + i * 60}" font-family="Inter, sans-serif" font-size="58" font-weight="700" fill="${textDark}">${escapeXml(ln)}</text>`
+        `<text x="50" y="${230 + i * 60}" font-family="Poppins, Inter, sans-serif" font-size="58" font-weight="700" fill="${textDark}">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
-  ${subhead ? `<text x="50" y="${230 + headlineLines.length * 60 + 10}" font-family="Inter, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
+  ${subhead ? `<text x="50" y="${230 + headlineLines.length * 60 + 10}" font-family="Poppins, Inter, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
   ${
     features && features.length
       ? features
@@ -234,12 +242,12 @@ function buildLightTealSvg(input: LightTealImageInput): string {
             const y = 400;
             return `
   <rect x="${x}" y="${y}" width="338" height="300" rx="14" fill="${IMAGE_COLORS.cardLight}" stroke="${teal}" stroke-width="1.5"/>
-  <text x="${x + 20}" y="${y + 36}" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="${teal}">${escapeXml(f.title)}</text>
+  <text x="${x + 20}" y="${y + 36}" font-family="Poppins, Inter, sans-serif" font-size="20" font-weight="700" fill="${teal}">${escapeXml(f.title)}</text>
   ${wrapText(f.body, 32)
     .slice(0, 6)
     .map(
       (ln, bi) =>
-        `<text x="${x + 20}" y="${y + 76 + bi * 26}" font-family="Inter, sans-serif" font-size="17" fill="${textDark}">${escapeXml(ln)}</text>`
+        `<text x="${x + 20}" y="${y + 76 + bi * 26}" font-family="Poppins, Inter, sans-serif" font-size="17" fill="${textDark}">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
             `.trim();
@@ -259,8 +267,8 @@ function buildLightTealSvg(input: LightTealImageInput): string {
             const x = 50 + i * 576;
             return `
   <rect x="${x}" y="730" width="524" height="110" rx="14" fill="${IMAGE_COLORS.cardLight}" stroke="${teal}" stroke-width="1.5"/>
-  <text x="${x + 262}" y="790" font-family="Inter, sans-serif" font-size="46" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(s.value)}</text>
-  <text x="${x + 262}" y="820" font-family="Inter, sans-serif" font-size="15" fill="${textDark}" text-anchor="middle">${escapeXml(s.label)}</text>
+  <text x="${x + 262}" y="790" font-family="Poppins, Inter, sans-serif" font-size="46" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(s.value)}</text>
+  <text x="${x + 262}" y="820" font-family="Poppins, Inter, sans-serif" font-size="15" fill="${textDark}" text-anchor="middle">${escapeXml(s.label)}</text>
           `.trim();
           })
           .join("\n")
@@ -297,13 +305,13 @@ function buildLightTealSvg(input: LightTealImageInput): string {
   ${
     cta
       ? `<rect x="50" y="${ctaY}" width="1100" height="100" rx="14" fill="${teal}"/>
-  <text x="600" y="${ctaY + 42}" font-family="Inter, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="24" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
-  <text x="600" y="${ctaY + 78}" font-family="Inter, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="18" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
+  <text x="600" y="${ctaY + 42}" font-family="Poppins, Inter, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="24" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
+  <text x="600" y="${ctaY + 78}" font-family="Poppins, Inter, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="18" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
       : ""
   }
 
   <!-- Footer URL -->
-  ${footer ? `<text x="600" y="${footerY}" font-family="Inter, sans-serif" fill="${textDark}" font-size="18" text-anchor="middle" opacity="0.6">${escapeXml(footer)}</text>` : ""}
+  ${footer ? `<text x="600" y="${footerY}" font-family="Poppins, Inter, sans-serif" fill="${textDark}" font-size="18" text-anchor="middle" opacity="0.6">${escapeXml(footer)}</text>` : ""}
 </svg>`;
 }
 
