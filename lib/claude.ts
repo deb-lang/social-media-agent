@@ -103,7 +103,15 @@ function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("Missing ANTHROPIC_API_KEY");
   }
-  _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // maxRetries=5 handles transient 5xx + 429 + grammar-compilation
+  // overloads. SDK does exponential backoff between attempts.
+  // timeout=600s allows long thinking + carousel streams. Defaults are
+  // too aggressive for our long-running structured-output calls.
+  _client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    maxRetries: 5,
+    timeout: 600_000,
+  });
   return _client;
 }
 
