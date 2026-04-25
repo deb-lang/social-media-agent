@@ -32,9 +32,12 @@ export interface PostListRow {
   rejection_count: number;
   scheduled_for: string | null;
   schedule_override: boolean;
+  approved_at: string | null;
+  approved_by: string | null;
   published_at: string | null;
   published_url: string | null;
   publer_post_id: string | null;
+  publer_job_id: string | null;
   // Quality gates
   originality_score: number | null;
   compliance_status: ComplianceStatus;
@@ -61,7 +64,7 @@ export interface PostListRow {
 
 // Columns that the list endpoint selects — mirrors PostListRow.
 export const POST_LIST_COLUMNS =
-  "id, created_at, updated_at, category, format, platform, caption, hashtags, image_url, carousel_pdf_url, carousel_slide_previews, status, rejection_feedback, rejection_count, scheduled_for, schedule_override, published_at, published_url, publer_post_id, originality_score, compliance_status, plagiarism_flags, compliance_issues, stat_value, stat_source, stat_url, stat_verified, impressions, engagement_rate, likes, comments, shares, link_clicks, follower_delta, is_recycled, recycled_from_post_id, utm_campaign, generation_run_id";
+  "id, created_at, updated_at, category, format, platform, caption, hashtags, image_url, carousel_pdf_url, carousel_slide_previews, status, rejection_feedback, rejection_count, scheduled_for, schedule_override, approved_at, approved_by, published_at, published_url, publer_post_id, publer_job_id, originality_score, compliance_status, plagiarism_flags, compliance_issues, stat_value, stat_source, stat_url, stat_verified, impressions, engagement_rate, likes, comments, shares, link_clicks, follower_delta, is_recycled, recycled_from_post_id, utm_campaign, generation_run_id";
 
 // Parse JSONB that may come back as an already-parsed array OR a string.
 // Supabase returns JSONB as parsed JS values, but our orchestrator stringifies

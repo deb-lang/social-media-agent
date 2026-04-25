@@ -10,14 +10,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // ESLint violations (mostly cosmetic unescaped entities) shouldn't block
-  // the Vercel deploy. Run `npm run lint` locally to triage — TypeScript
-  // errors still fail the build.
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // pdf-lib + @resvg/resvg-js are server-only native deps. Mark them as
   // external so Next doesn't try to bundle them for the edge runtime.
+  // (Next.js 16 no longer runs ESLint at build time — `next lint` was
+  // removed; lint with `eslint .` separately.)
   serverExternalPackages: ["@resvg/resvg-js", "pdf-lib"],
 };
 
