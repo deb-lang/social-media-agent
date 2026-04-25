@@ -21,23 +21,33 @@ export const StatCardSchema = z.object({
   label: z.string().min(1).max(80),
 });
 
+// Demo-focused CTA. The bold line is the action ("Schedule a free demo",
+// "Book a demo this week", "Get a 20-minute walkthrough"). The supporting
+// line is optional value-prop or URL. Never first-person, never bare
+// "Learn more" — see CTA RULES in VOICE_SYSTEM_PROMPT.
 export const CtaSchema = z.object({
-  bold: z.string().min(1).max(100),
-  supporting: z.string().min(1).max(100),
+  bold: z.string().min(1).max(80),
+  supporting: z.string().max(80).optional(),
 });
 
+// Dense fill required: every dark_navy stats image must populate
+// 3 problem + 3 solution cards. Headline + subhead both required.
 export const DarkNavyImageSchema = z.object({
   template: z.literal("dark_navy"),
   headline: z.string().min(1).max(120),
-  subhead: z.string().max(120).optional(),
-  problemLabel: z.string().max(40).optional(),
-  problemStats: z.array(StatCardSchema).max(3).optional(),
-  solutionLabel: z.string().max(40).optional(),
-  solutionStats: z.array(StatCardSchema).max(3).optional(),
-  cta: CtaSchema.optional(),
+  subhead: z.string().min(1).max(120),
+  problemLabel: z.string().min(1).max(40),
+  problemStats: z.array(StatCardSchema).length(3),
+  solutionLabel: z.string().min(1).max(40),
+  solutionStats: z.array(StatCardSchema).length(3),
+  cta: CtaSchema,
   footer: z.string().max(60).optional(),
 });
 
+// Quote variant: third-party source only.
+//   attribution = real source name (Accenture, BMC Medicine, JAMA, etc.)
+//   role = publication / study context (required, holds the citation detail)
+// Announcement / feature variants must populate all 3 feature cards.
 export const LightTealImageSchema = z.object({
   template: z.literal("light_teal"),
   kind: z.enum(["quote", "announcement", "feature"]),
@@ -46,16 +56,16 @@ export const LightTealImageSchema = z.object({
   quote: z
     .object({
       text: z.string().min(1).max(240),
-      attribution: z.string().min(1).max(40),
-      role: z.string().max(60).optional(),
+      attribution: z.string().min(1).max(80),
+      role: z.string().min(1).max(80),
     })
     .optional(),
   features: z
-    .array(z.object({ title: z.string().max(40), body: z.string().max(140) }))
+    .array(z.object({ title: z.string().min(1).max(40), body: z.string().min(1).max(140) }))
     .max(3)
     .optional(),
   bottomStats: z.array(StatCardSchema).max(2).optional(),
-  cta: CtaSchema.optional(),
+  cta: CtaSchema,
   footer: z.string().max(60).optional(),
 });
 
