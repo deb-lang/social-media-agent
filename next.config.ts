@@ -22,6 +22,22 @@ const nextConfig: NextConfig = {
     "cheerio",
   ],
 
+  // Force-bundle the chromium binary + the PatientPartner logo for every
+  // route that calls lib/render-html.ts. Vercel's tracer doesn't see the
+  // binary because @sparticuz/chromium loads it via a runtime-computed path
+  // (process.cwd() + bin/chromium.br) — the binary lives outside any
+  // import graph. Same for the logo PNG read by lib/templates/shared.ts.
+  outputFileTracingIncludes: {
+    "/api/generate": [
+      "./node_modules/@sparticuz/chromium/bin/**",
+      "./public/logo.png",
+    ],
+    "/api/posts/manual": [
+      "./node_modules/@sparticuz/chromium/bin/**",
+      "./public/logo.png",
+    ],
+  },
+
   // TEMPORARY: ignore TS build errors so the critical TTF font fix can
   // deploy. Two parallel agents have been pushing fixes and there's a
   // lurking type error blocking every recent build. The runtime code is

@@ -210,15 +210,21 @@ export const Slide5ContentSchema = z.object({
   url: z.string().min(4).max(80),
 });
 
+// Slides: discriminated by `kind` so order is enforced AT BUILD TIME by
+// build-post.ts (which reads slides[0]..[4] directly). The .length(5) keeps
+// the array exactly 5 items but is friendlier to Claude's grammar compiler
+// than z.tuple([...]) which produced a too-strict prefixItems schema.
+export const SlideContentSchema = z.discriminatedUnion("kind", [
+  Slide1ContentSchema,
+  Slide2ContentSchema,
+  Slide3ContentSchema,
+  Slide4ContentSchema,
+  Slide5ContentSchema,
+]);
+
 export const CarouselContentSchema = z.object({
   template: z.literal("carousel"),
-  slides: z.tuple([
-    Slide1ContentSchema,
-    Slide2ContentSchema,
-    Slide3ContentSchema,
-    Slide4ContentSchema,
-    Slide5ContentSchema,
-  ]),
+  slides: z.array(SlideContentSchema).length(5),
 });
 
 // V2 wrapper schemas — caption + hashtags + template content.
