@@ -51,15 +51,14 @@ export function eyebrow(text: string, color: string = COLORS.mintPrimary): strin
   return `<div style="font-family:${FONTS.body}; font-weight:600; font-size:14px; letter-spacing:0.14em; text-transform:uppercase; color:${color};">${esc(text)}</div>`;
 }
 
-// Footer strap — small line at bottom of post (logo + URL).
-// Used across every template to maintain brand consistency.
+// Footer URL — small line at bottom of post. Logo removed (header already
+// has the wordmark, so a second logo bottom-right was redundant).
 export function footerStrap(opts: { url?: string; tone: "dark" | "light" } = { tone: "light" }): string {
   const fg = opts.tone === "dark" ? COLORS.mintLight : COLORS.mintPrimary;
   const url = opts.url ?? "patientpartner.com";
   return `
-<div style="display:flex; align-items:center; gap:12px; font-family:${FONTS.body}; font-size:14px; font-weight:600; color:${fg}; letter-spacing:0.04em;">
-  ${logoSmall({ height: 22 })}
-  <span>${esc(url)}</span>
+<div style="font-family:${FONTS.body}; font-size:14px; font-weight:600; color:${fg}; letter-spacing:0.04em;">
+  ${esc(url)}
 </div>`.trim();
 }
 

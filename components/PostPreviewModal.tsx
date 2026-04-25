@@ -279,7 +279,7 @@ export default function PostPreviewModal({ postId, onClose }: PostPreviewModalPr
                 onClick={() => setLightbox(currentSlide)}
                 style={{
                   width: "100%",
-                  aspectRatio: isCarousel ? "1080/1350" : "1/1",
+                  aspectRatio: "1/1", // both image posts and carousel slides are 1080x1080
                   borderRadius: 18,
                   overflow: "hidden",
                   border: "none",
@@ -307,8 +307,9 @@ export default function PostPreviewModal({ postId, onClose }: PostPreviewModalPr
                     gap: 5,
                     background: "rgba(11, 45, 72, 0.7)",
                     backdropFilter: "blur(6px)",
-                    padding: "6px 10px",
+                    padding: "6px 12px",
                     borderRadius: 999,
+                    alignItems: "center",
                   }}>
                     {slides.map((_, i) => (
                       <span
@@ -318,10 +319,19 @@ export default function PostPreviewModal({ postId, onClose }: PostPreviewModalPr
                           height: 6,
                           borderRadius: 999,
                           background: i === slideIdx % slides.length ? "#fff" : "rgba(255, 255, 255, 0.45)",
-                          transition: "all var(--t-fast)",
+                          transition: "all 150ms",
                         }}
                       />
                     ))}
+                    <span style={{
+                      marginLeft: 8,
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.85)",
+                      letterSpacing: ".08em",
+                    }}>
+                      {(slideIdx % slides.length) + 1} / {slides.length}
+                    </span>
                   </div>
                 )}
               </button>
@@ -340,26 +350,33 @@ export default function PostPreviewModal({ postId, onClose }: PostPreviewModalPr
               </div>
             )}
 
-            {/* Carousel nav (under preview) */}
+            {/* Carousel: compact slide nav under preview (← → + counter) */}
             {isCarousel && slides.length > 1 && (
-              <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 14 }}>
+              <div style={{
+                display: "flex", justifyContent: "center", alignItems: "center",
+                gap: 12, marginTop: 14,
+              }}>
                 <button
                   type="button"
                   onClick={() => setSlideIdx((i) => (i - 1 + slides.length) % slides.length)}
                   className="btn"
-                  style={{ padding: "8px 12px" }}
+                  style={{ padding: "6px 14px", fontSize: 16, lineHeight: 1 }}
                   aria-label="Previous slide"
                 >
                   ‹
                 </button>
-                <div style={{ alignSelf: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", letterSpacing: ".06em" }}>
-                  Slide {(slideIdx % slides.length) + 1} / {slides.length}
+                <div style={{
+                  fontFamily: "var(--font-mono)", fontSize: 12,
+                  color: "var(--text-muted)", letterSpacing: ".08em",
+                  fontWeight: 500,
+                }}>
+                  Slide {(slideIdx % slides.length) + 1} of {slides.length}
                 </div>
                 <button
                   type="button"
                   onClick={() => setSlideIdx((i) => (i + 1) % slides.length)}
                   className="btn"
-                  style={{ padding: "8px 12px" }}
+                  style={{ padding: "6px 14px", fontSize: 16, lineHeight: 1 }}
                   aria-label="Next slide"
                 >
                   ›
@@ -534,18 +551,75 @@ export default function PostPreviewModal({ postId, onClose }: PostPreviewModalPr
             cursor: "zoom-out",
           }}
         >
+          {/* Click image to advance to next slide (carousel only).
+              Click backdrop OR X button to close. Arrow keys also work. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={lightbox}
+            src={isCarousel && slides.length > 1 ? slides[slideIdx % slides.length] : lightbox}
             alt="Expanded preview"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isCarousel && slides.length > 1) {
+                setSlideIdx((i) => (i + 1) % slides.length);
+              } else {
+                setLightbox(null);
+              }
+            }}
             style={{
               maxWidth: "100%",
               maxHeight: "100%",
               objectFit: "contain",
               boxShadow: "0 40px 80px rgba(0, 0, 0, 0.5)",
               borderRadius: 14,
+              cursor: isCarousel && slides.length > 1 ? "pointer" : "zoom-out",
             }}
           />
+
+          {/* Slide indicator (carousel) — pill in bottom center */}
+          {isCarousel && slides.length > 1 && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute",
+                bottom: 32,
+                left: "50%",
+                transform: "translateX(-50%)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 18px",
+                borderRadius: 999,
+                background: "rgba(0, 0, 0, 0.55)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                border: "1px solid rgba(255, 255, 255, 0.18)",
+              }}
+            >
+              {slides.map((_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: i === slideIdx % slides.length ? 22 : 7,
+                    height: 7,
+                    borderRadius: 999,
+                    background: i === slideIdx % slides.length ? "#fff" : "rgba(255, 255, 255, 0.45)",
+                    transition: "all 200ms",
+                  }}
+                />
+              ))}
+              <span style={{
+                marginLeft: 10,
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+                color: "rgba(255, 255, 255, 0.92)",
+                letterSpacing: ".06em",
+                fontWeight: 500,
+              }}>
+                {(slideIdx % slides.length) + 1} / {slides.length} · click to advance
+              </span>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
