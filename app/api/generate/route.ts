@@ -99,6 +99,18 @@ async function markRunFailed(run_id: string, err: unknown) {
     .eq("id", run_id);
 }
 
+// Per-step timeout wrapper — protects every Claude/network call from
+// hanging forever (which previously masked itself as in_progress until
+// Vercel killed the whole function silently).
+function withTimeout<T>(label: string, ms: number, p: Promise<T>): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Step "${label}" timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
+}
+
 // ─── Core pipeline ─────────────────────────────────────
 
 async function runGeneration(run_id: string) {
@@ -108,17 +120,18 @@ async function runGeneration(run_id: string) {
   const tag = run_id.slice(0, 8);
   const ms = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
 
-  // 1. refresh resources cache (non-fatal)
+  // 1. refresh resources cache (non-fatal · 30s cap)
   try {
-    const { scraped, upserted } = await refreshResourceCache();
+    const { scraped, upserted } = await withTimeout("scrape", 30_000, refreshResourceCache());
     console.log(`[gen ${tag}] ${ms()} scrape ok · ${scraped} fetched, ${upserted} upserted`);
   } catch (err) {
     console.warn(`[gen ${tag}] ${ms()} scrape failed (non-fatal):`, err);
   }
 
-  // 2. find fresh stats via Claude web search (non-fatal)
+  // 2. find fresh stats via Claude web search (non-fatal · 60s cap — Claude
+  // web-search has been the silent hang point; cap aggressively).
   try {
-    const fresh = await findFreshStats({ limit: 4 });
+    const fresh = await withTimeout("stat-finder", 60_000, findFreshStats({ limit: 4 }));
     await persistFoundStats(fresh);
     console.log(`[gen ${tag}] ${ms()} stat-finder ok · ${fresh.length} fresh stats`);
   } catch (err) {
@@ -140,14 +153,20 @@ async function runGeneration(run_id: string) {
   ]);
   console.log(`[gen ${tag}] ${ms()} ctx ready · ${externalStats.length} external stats, ${recent.length} recent posts`);
 
+  // Each post gets a 5-min hard cap. With 800s overall budget and parallel
+  // execution, both posts together cap at max(p1,p2) = 5min, leaving 8+ min
+  // headroom for any retries or the 60s stat-finder cap.
   const postIds: string[] = [];
   const settled = await Promise.allSettled(
     categories.map((category, i) =>
-      buildOnePost({ run_id, category, format: formats[i], externalStats, recent })
-        .then((id) => {
-          console.log(`[gen ${tag}] ${ms()} post ${category}/${formats[i]} done → ${id.slice(0, 8)}`);
-          return id;
-        })
+      withTimeout(
+        `post ${category}/${formats[i]}`,
+        300_000,
+        buildOnePost({ run_id, category, format: formats[i], externalStats, recent })
+      ).then((id) => {
+        console.log(`[gen ${tag}] ${ms()} post ${category}/${formats[i]} done → ${id.slice(0, 8)}`);
+        return id;
+      })
     )
   );
   for (let i = 0; i < settled.length; i++) {
