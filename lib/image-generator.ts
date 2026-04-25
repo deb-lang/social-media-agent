@@ -23,21 +23,15 @@ import {
   CAROUSEL_SLIDE_HEIGHT,
 } from "./constants";
 
-// Ship Poppins (display) + Inter (body fallback) via @fontsource so Resvg has
-// guaranteed fonts on Vercel's containers (where system fonts are unreliable).
-// Resvg reads WOFF/WOFF2 directly via fontkit-rs.
-// Poppins matches the dashboard's --font-display so rendered images and the
-// dashboard share visual identity.
+// CRITICAL: Resvg 2.6.2 cannot reliably decode WOFF/WOFF2 files via fontFiles
+// (verified locally — produces 962-byte blank PNGs). Use TTF instead.
+// Files committed to public/fonts/ so they ship with the Vercel function bundle
+// (the /public directory is always included; no outputFileTracingIncludes needed).
 const FONT_FILES = [
-  // Poppins (primary — display + body)
-  join(process.cwd(), "node_modules/@fontsource/poppins/files/poppins-latin-400-normal.woff2"),
-  join(process.cwd(), "node_modules/@fontsource/poppins/files/poppins-latin-600-normal.woff2"),
-  join(process.cwd(), "node_modules/@fontsource/poppins/files/poppins-latin-700-normal.woff2"),
-  // Inter (fallback — covers any text the Poppins family doesn't, e.g.
-  // smart quotes, monospace numerics)
-  join(process.cwd(), "node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2"),
-  join(process.cwd(), "node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2"),
-  join(process.cwd(), "node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2"),
+  join(process.cwd(), "public/fonts/Poppins-Regular.ttf"),
+  join(process.cwd(), "public/fonts/Poppins-SemiBold.ttf"),
+  join(process.cwd(), "public/fonts/Poppins-Bold.ttf"),
+  join(process.cwd(), "public/fonts/Inter-Regular.ttf"), // fallback for chars Poppins lacks
 ];
 
 const RESVG_FONT_OPTS = {
