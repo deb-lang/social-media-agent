@@ -88,7 +88,11 @@ export const CarouselPostSchema = z.object({
   ...PostShared,
   format: z.literal("carousel"),
   carousel_title: z.string().min(1).max(80),
-  slides: z.array(ImageInputSchema).min(5).max(8),
+  // 3-5 slides for fast LinkedIn load + simpler grammar compilation.
+  // Lower bound 3 = enough for hook → insight → CTA. Upper bound 5
+  // keeps the structured-output schema small enough to avoid Anthropic
+  // grammar-compilation timeouts.
+  slides: z.array(ImageInputSchema).min(3).max(5),
 });
 
 export type ImagePost = z.infer<typeof ImagePostSchema>;
@@ -244,11 +248,13 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
   cacheHits: { read: number; create: number };
 }> {
   if (ctx.format !== "carousel") throw new Error("generateCarouselPost requires format='carousel'");
-  // Carousel output is larger (~6-8K tokens for 8 slides + caption). Stream it.
-  // SDK's messages.stream() accepts MessageStreamParams (= ParseableMessageCreateParams).
-  const stream = client().messages.stream({
+  // Use messages.parse() (same path as image post) instead of streaming.
+  // Streaming added complexity + transient grammar-compilation flakes for
+  // marginal benefit. With slides reduced to 3-5, output fits comfortably
+  // under 4096 tokens. SDK's auto-retry (5x) covers transient 5xx.
+  const res = await client().messages.parse({
     model: CLAUDE_MODEL,
-    max_tokens: 8192,
+    max_tokens: 4096,
     thinking: { type: "adaptive" },
     output_config: {
       effort: "high",
@@ -256,19 +262,17 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
     },
     system: systemBlocks(),
     messages: [{ role: "user", content: buildUserMessage(ctx) }],
-  } as Anthropic.MessageStreamParams);
+  } as Anthropic.MessageCreateParamsNonStreaming);
 
-  const final = await stream.finalMessage();
-  // With zodOutputFormat, finalMessage() includes parsed_output.
-  if (!final.parsed_output) {
+  if (!res.parsed_output) {
     throw new Error("Claude returned no parsed_output for carousel");
   }
-  const parsed = final.parsed_output as CarouselPost;
+  const parsed = res.parsed_output as CarouselPost;
   return {
     post: parsed,
     cacheHits: {
-      read: final.usage.cache_read_input_tokens ?? 0,
-      create: final.usage.cache_creation_input_tokens ?? 0,
+      read: res.usage.cache_read_input_tokens ?? 0,
+      create: res.usage.cache_creation_input_tokens ?? 0,
     },
   };
 }

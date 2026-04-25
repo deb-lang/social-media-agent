@@ -5,6 +5,12 @@
 // Two templates:
 //   - dark_navy: stats, data, problem-solution, clinical trial facts
 //   - light_teal: quotes, product announcements, PerfectPatient, milestones
+//
+// Font note: Vercel's serverless Linux containers do NOT have Arial. Resvg
+// silently drops <text> elements when it can't resolve the font. We use a
+// system-safe stack + tell Resvg the default family so it renders even on
+// minimal containers. DejaVu Sans is preinstalled on every Linux distro
+// Vercel runs.
 
 import { Resvg } from "@resvg/resvg-js";
 import { PDFDocument } from "pdf-lib";
@@ -16,6 +22,16 @@ import {
   CAROUSEL_SLIDE_WIDTH,
   CAROUSEL_SLIDE_HEIGHT,
 } from "./constants";
+
+// SVG font stack — first hit wins; "sans-serif" generic at the end is the
+// final fallback that Resvg's defaultFontFamily resolves to (DejaVu Sans).
+const FONT_STACK = "DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif";
+
+// Resvg config shared between image and slide rendering.
+const RESVG_FONT_OPTS = {
+  loadSystemFonts: true,
+  defaultFontFamily: "DejaVu Sans",
+} as const;
 
 // ─── Logo ───────────────────────────────────────────────
 // Lazily loaded + cached. Read from /public/logo.png at module init.
@@ -108,11 +124,11 @@ function buildDarkNavySvg(input: DarkNavyImageInput): string {
       return `
   <rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="12"
     fill="${cardColor}" stroke="${teal}" stroke-width="${opts.strokeWidth}"/>
-  <text x="${x + cardW / 2}" y="${y + 92}" font-family="Arial, sans-serif" font-size="76" font-weight="700" fill="${statFill}" text-anchor="middle">${escapeXml(s.value)}</text>
+  <text x="${x + cardW / 2}" y="${y + 92}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="76" font-weight="700" fill="${statFill}" text-anchor="middle">${escapeXml(s.value)}</text>
   ${labelLines
     .map(
       (ln, idx) =>
-        `<text x="${x + cardW / 2}" y="${y + 140 + idx * 26}" font-family="Arial, sans-serif" font-size="20" fill="#E0ECF4" text-anchor="middle">${escapeXml(ln)}</text>`
+        `<text x="${x + cardW / 2}" y="${y + 140 + idx * 26}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="20" fill="#E0ECF4" text-anchor="middle">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
     `.trim();
@@ -141,30 +157,30 @@ function buildDarkNavySvg(input: DarkNavyImageInput): string {
   ${headlineLines
     .map(
       (ln, i) =>
-        `<text x="50" y="${210 + i * 58}" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="${IMAGE_COLORS.textWhite}">${escapeXml(ln)}</text>`
+        `<text x="50" y="${210 + i * 58}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="54" font-weight="700" fill="${IMAGE_COLORS.textWhite}">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
-  ${subhead ? `<text x="50" y="${210 + headlineLines.length * 58 + 8}" font-family="Arial, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
+  ${subhead ? `<text x="50" y="${210 + headlineLines.length * 58 + 8}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
 
   <!-- Problem label + row -->
-  ${problemLabel ? `<text x="50" y="335" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(problemLabel.toUpperCase())}</text>` : ""}
+  ${problemLabel ? `<text x="50" y="335" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(problemLabel.toUpperCase())}</text>` : ""}
   ${problemStats && problemStats.length ? renderStatRow(problemStats, problemRowY, { tealStat: false, strokeWidth: 1 }) : ""}
 
   <!-- Solution label + row -->
-  ${solutionLabel ? `<text x="50" y="605" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(solutionLabel.toUpperCase())}</text>` : ""}
+  ${solutionLabel ? `<text x="50" y="605" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="${teal}" letter-spacing="3">${escapeXml(solutionLabel.toUpperCase())}</text>` : ""}
   ${solutionStats && solutionStats.length ? renderStatRow(solutionStats, solutionRowY, { tealStat: true, strokeWidth: 2.5 }) : ""}
 
   <!-- CTA bar -->
   ${
     cta
       ? `<rect x="50" y="${ctaY}" width="1100" height="100" rx="12" fill="${teal}" opacity="0.12" stroke="${teal}" stroke-width="1"/>
-  <text x="600" y="${ctaY + 42}" font-family="Arial, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="26" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
-  <text x="600" y="${ctaY + 78}" font-family="Arial, sans-serif" fill="${teal}" font-size="20" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
+  <text x="600" y="${ctaY + 42}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="26" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
+  <text x="600" y="${ctaY + 78}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" fill="${teal}" font-size="20" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
       : ""
   }
 
   <!-- Footer URL -->
-  ${footer ? `<text x="600" y="${footerY}" font-family="Arial, sans-serif" fill="${teal}" font-size="18" text-anchor="middle" opacity="0.7">${escapeXml(footer)}</text>` : ""}
+  ${footer ? `<text x="600" y="${footerY}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" fill="${teal}" font-size="18" text-anchor="middle" opacity="0.7">${escapeXml(footer)}</text>` : ""}
 </svg>`;
 }
 
@@ -184,15 +200,15 @@ function buildLightTealSvg(input: LightTealImageInput): string {
     const quoteLines = wrapText(quote.text, 44);
     const quoteBlockY = 410;
     body = `
-  <text x="50" y="400" font-family="Arial, sans-serif" font-size="160" font-weight="700" fill="${teal}">&#8220;</text>
+  <text x="50" y="400" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="160" font-weight="700" fill="${teal}">&#8220;</text>
   ${quoteLines
     .map(
       (ln, i) =>
-        `<text x="600" y="${quoteBlockY + 80 + i * 44}" font-family="Arial, sans-serif" font-size="32" font-style="italic" fill="${textDark}" text-anchor="middle">${escapeXml(ln)}</text>`
+        `<text x="600" y="${quoteBlockY + 80 + i * 44}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="32" font-style="italic" fill="${textDark}" text-anchor="middle">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
-  <text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 40}" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(quote.attribution)}</text>
-  ${quote.role ? `<text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 70}" font-family="Arial, sans-serif" font-size="20" fill="${textDark}" text-anchor="middle">${escapeXml(quote.role)}</text>` : ""}
+  <text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 40}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(quote.attribution)}</text>
+  ${quote.role ? `<text x="600" y="${quoteBlockY + 80 + quoteLines.length * 44 + 70}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="20" fill="${textDark}" text-anchor="middle">${escapeXml(quote.role)}</text>` : ""}
     `;
   } else if (kind === "announcement" || kind === "feature") {
     const headlineLines = headline ? wrapText(headline, 26).slice(0, 2) : [];
@@ -200,10 +216,10 @@ function buildLightTealSvg(input: LightTealImageInput): string {
   ${headlineLines
     .map(
       (ln, i) =>
-        `<text x="50" y="${230 + i * 60}" font-family="Arial, sans-serif" font-size="58" font-weight="700" fill="${textDark}">${escapeXml(ln)}</text>`
+        `<text x="50" y="${230 + i * 60}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="58" font-weight="700" fill="${textDark}">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
-  ${subhead ? `<text x="50" y="${230 + headlineLines.length * 60 + 10}" font-family="Arial, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
+  ${subhead ? `<text x="50" y="${230 + headlineLines.length * 60 + 10}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="24" fill="${teal}">${escapeXml(subhead)}</text>` : ""}
   ${
     features && features.length
       ? features
@@ -213,12 +229,12 @@ function buildLightTealSvg(input: LightTealImageInput): string {
             const y = 400;
             return `
   <rect x="${x}" y="${y}" width="338" height="300" rx="14" fill="${IMAGE_COLORS.cardLight}" stroke="${teal}" stroke-width="1.5"/>
-  <text x="${x + 20}" y="${y + 36}" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="${teal}">${escapeXml(f.title)}</text>
+  <text x="${x + 20}" y="${y + 36}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="${teal}">${escapeXml(f.title)}</text>
   ${wrapText(f.body, 32)
     .slice(0, 6)
     .map(
       (ln, bi) =>
-        `<text x="${x + 20}" y="${y + 76 + bi * 26}" font-family="Arial, sans-serif" font-size="17" fill="${textDark}">${escapeXml(ln)}</text>`
+        `<text x="${x + 20}" y="${y + 76 + bi * 26}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="17" fill="${textDark}">${escapeXml(ln)}</text>`
     )
     .join("\n  ")}
             `.trim();
@@ -238,8 +254,8 @@ function buildLightTealSvg(input: LightTealImageInput): string {
             const x = 50 + i * 576;
             return `
   <rect x="${x}" y="730" width="524" height="110" rx="14" fill="${IMAGE_COLORS.cardLight}" stroke="${teal}" stroke-width="1.5"/>
-  <text x="${x + 262}" y="790" font-family="Arial, sans-serif" font-size="46" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(s.value)}</text>
-  <text x="${x + 262}" y="820" font-family="Arial, sans-serif" font-size="15" fill="${textDark}" text-anchor="middle">${escapeXml(s.label)}</text>
+  <text x="${x + 262}" y="790" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="46" font-weight="700" fill="${teal}" text-anchor="middle">${escapeXml(s.value)}</text>
+  <text x="${x + 262}" y="820" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" font-size="15" fill="${textDark}" text-anchor="middle">${escapeXml(s.label)}</text>
           `.trim();
           })
           .join("\n")
@@ -276,13 +292,13 @@ function buildLightTealSvg(input: LightTealImageInput): string {
   ${
     cta
       ? `<rect x="50" y="${ctaY}" width="1100" height="100" rx="14" fill="${teal}"/>
-  <text x="600" y="${ctaY + 42}" font-family="Arial, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="24" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
-  <text x="600" y="${ctaY + 78}" font-family="Arial, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="18" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
+  <text x="600" y="${ctaY + 42}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="24" font-weight="700" text-anchor="middle">${escapeXml(cta.bold)}</text>
+  <text x="600" y="${ctaY + 78}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" fill="${IMAGE_COLORS.textWhite}" font-size="18" text-anchor="middle">${escapeXml(cta.supporting)}</text>`
       : ""
   }
 
   <!-- Footer URL -->
-  ${footer ? `<text x="600" y="${footerY}" font-family="Arial, sans-serif" fill="${textDark}" font-size="18" text-anchor="middle" opacity="0.6">${escapeXml(footer)}</text>` : ""}
+  ${footer ? `<text x="600" y="${footerY}" font-family="DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif" fill="${textDark}" font-size="18" text-anchor="middle" opacity="0.6">${escapeXml(footer)}</text>` : ""}
 </svg>`;
 }
 
@@ -293,7 +309,10 @@ export function buildSvg(input: ImageInput): string {
 
 export function renderImage(input: ImageInput): Buffer {
   const svg = buildSvg(input);
-  const resvg = new Resvg(svg, { fitTo: { mode: "width", value: IMAGE_SIZE } });
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: "width", value: IMAGE_SIZE },
+    font: RESVG_FONT_OPTS,
+  });
   return resvg.render().asPng();
 }
 
@@ -309,6 +328,7 @@ export interface CarouselSlide {
 export function renderSlidePng(svg1080x1350: string): Buffer {
   const resvg = new Resvg(svg1080x1350, {
     fitTo: { mode: "width", value: CAROUSEL_SLIDE_WIDTH },
+    font: RESVG_FONT_OPTS,
   });
   return resvg.render().asPng();
 }
