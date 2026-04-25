@@ -400,82 +400,13 @@ export async function regeneratePost(
 }
 
 // ─── Zod → JSON Schema ──────────────────────────────────
-// The Anthropic API's output_config.format.json_schema wants plain JSON Schema.
-// Minimal converter covering the shapes we use: discriminatedUnion, optional,
-// literal, enum, array, string, number, boolean, object. If Zod's `toJSONSchema`
-// helper becomes available we'll swap to it.
+// Zod 4 ships z.toJSONSchema() natively. The previous hand-rolled converter
+// read schema._def.typeName which Zod 4 removed — every conversion silently
+// returned {} → Claude rejected with 400 → buildOnePost failed in <1s →
+// the orchestrator logged "0 posts generated" with no error. Use the native
+// converter, which produces a fully spec-compliant JSON Schema.
 
-function zodToJsonSchema(schema: z.ZodTypeAny): unknown {
-  const def = (schema as { _def: { typeName?: string } })._def;
-  const typeName = def.typeName;
-
-  // z.object({...})
-  if (typeName === "ZodObject") {
-    const shape = (schema as z.ZodObject<z.ZodRawShape>).shape;
-    const properties: Record<string, unknown> = {};
-    const required: string[] = [];
-    for (const [key, val] of Object.entries(shape)) {
-      const child = val as z.ZodTypeAny;
-      properties[key] = zodToJsonSchema(child);
-      if (!child.isOptional()) required.push(key);
-    }
-    return { type: "object", properties, required, additionalProperties: false };
-  }
-
-  // z.string()
-  if (typeName === "ZodString") {
-    const out: Record<string, unknown> = { type: "string" };
-    const checks = (def as { checks?: Array<{ kind: string; value?: number; value2?: string }> })
-      .checks;
-    checks?.forEach((c) => {
-      if (c.kind === "min" && typeof c.value === "number") out.minLength = c.value;
-      if (c.kind === "max" && typeof c.value === "number") out.maxLength = c.value;
-    });
-    return out;
-  }
-
-  // z.number()
-  if (typeName === "ZodNumber") return { type: "number" };
-  if (typeName === "ZodBoolean") return { type: "boolean" };
-
-  // z.array(...)
-  if (typeName === "ZodArray") {
-    const inner = (schema as z.ZodArray<z.ZodTypeAny>).element;
-    const checks = (def as { minLength?: { value: number }; maxLength?: { value: number } });
-    const out: Record<string, unknown> = { type: "array", items: zodToJsonSchema(inner) };
-    if (checks.minLength) out.minItems = checks.minLength.value;
-    if (checks.maxLength) out.maxItems = checks.maxLength.value;
-    return out;
-  }
-
-  // z.enum(['a','b'])
-  if (typeName === "ZodEnum") {
-    const values = (def as { values: readonly string[] }).values;
-    return { type: "string", enum: [...values] };
-  }
-
-  // z.literal('x')
-  if (typeName === "ZodLiteral") {
-    const value = (def as { value: string | number | boolean }).value;
-    return { const: value };
-  }
-
-  // z.optional(inner) — unwrap (optionality handled by parent ZodObject required[])
-  if (typeName === "ZodOptional") {
-    return zodToJsonSchema((schema as z.ZodOptional<z.ZodTypeAny>).unwrap());
-  }
-
-  // z.discriminatedUnion('key', [a, b])
-  if (typeName === "ZodDiscriminatedUnion") {
-    const options = (def as { options: z.ZodTypeAny[] }).options;
-    return { oneOf: options.map((o) => zodToJsonSchema(o)) };
-  }
-
-  // z.union([a, b])
-  if (typeName === "ZodUnion") {
-    const options = (def as { options: z.ZodTypeAny[] }).options;
-    return { anyOf: options.map((o) => zodToJsonSchema(o)) };
-  }
-
-  return {}; // fallback
+function zodToJsonSchema(schema: z.ZodType): unknown {
+  // Anthropic's output_config.format wants Draft 2020-12 with no $ref unwrapping.
+  return z.toJSONSchema(schema, { target: "draft-2020-12" });
 }

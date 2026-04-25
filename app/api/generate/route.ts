@@ -161,6 +161,7 @@ async function runGeneration(run_id: string) {
       })
     )
   );
+  const failureMessages: string[] = [];
   for (let i = 0; i < settled.length; i++) {
     const r = settled[i];
     if (r.status === "fulfilled") {
@@ -168,7 +169,9 @@ async function runGeneration(run_id: string) {
     } else {
       const category = categories[i];
       const format = formats[i];
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
       console.error(`[gen ${tag}] ${ms()} post ${category}/${format} FAILED:`, r.reason);
+      failureMessages.push(`${category}/${format}: ${msg}`);
       await notifyFailure({
         context: `generation.post.${category}.${format}`,
         error: r.reason,
@@ -178,12 +181,17 @@ async function runGeneration(run_id: string) {
   }
   console.log(`[gen ${tag}] ${ms()} all posts settled · ${postIds.length}/${categories.length} succeeded`);
 
-  // 5. finalize run
+  // 5. finalize run — if all posts failed, mark the run failed (not completed)
+  // and write the actual error messages to error_message so Supabase REST shows
+  // them. This is the diagnostic safety net for any future "0 posts generated"
+  // mystery.
+  const finalStatus = postIds.length > 0 ? "completed" : "failed";
   await sb
     .from("generation_runs")
     .update({
-      status: "completed",
+      status: finalStatus,
       posts_generated: postIds.length,
+      error_message: failureMessages.length > 0 ? failureMessages.join(" | ") : null,
       completed_at: new Date().toISOString(),
     })
     .eq("id", run_id);
