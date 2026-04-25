@@ -46,7 +46,10 @@ import { notifyFailure, notifyReadyForReview } from "@/lib/slack";
 import { authorizeCron } from "@/lib/cron-auth";
 import type { ContentCategory, PostFormat } from "@/lib/constants";
 
-export const maxDuration = 300;
+// 800s is the Vercel Pro Fluid Compute ceiling. Two sequential Claude
+// generations with effort=high + adaptive thinking + 5K-token cached system
+// prompt routinely take 4-7min combined; the prior 300s cap was insufficient.
+export const maxDuration = 800;
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
@@ -101,57 +104,68 @@ async function markRunFailed(run_id: string, err: unknown) {
 async function runGeneration(run_id: string) {
   const sb = supabaseAdmin();
 
+  const t0 = Date.now();
+  const tag = run_id.slice(0, 8);
+  const ms = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
+
   // 1. refresh resources cache (non-fatal)
   try {
     const { scraped, upserted } = await refreshResourceCache();
-    console.log(`[generate ${run_id.slice(0, 8)}] scraped ${scraped}, upserted ${upserted}`);
+    console.log(`[gen ${tag}] ${ms()} scrape ok · ${scraped} fetched, ${upserted} upserted`);
   } catch (err) {
-    console.warn(`[generate ${run_id.slice(0, 8)}] scrape failed (non-fatal):`, err);
+    console.warn(`[gen ${tag}] ${ms()} scrape failed (non-fatal):`, err);
   }
 
   // 2. find fresh stats via Claude web search (non-fatal)
   try {
     const fresh = await findFreshStats({ limit: 4 });
     await persistFoundStats(fresh);
-    console.log(`[generate ${run_id.slice(0, 8)}] found ${fresh.length} fresh stats`);
+    console.log(`[gen ${tag}] ${ms()} stat-finder ok · ${fresh.length} fresh stats`);
   } catch (err) {
-    console.warn(`[generate ${run_id.slice(0, 8)}] stat-finder failed (non-fatal):`, err);
+    console.warn(`[gen ${tag}] ${ms()} stat-finder failed (non-fatal):`, err);
   }
 
   // 3. pick categories + assign formats
   const categories = await pickCategories(2);
   const formats = assignFormats(categories);
   console.log(
-    `[generate ${run_id.slice(0, 8)}] picks:`,
-    categories.map((c, i) => `${c}/${formats[i]}`).join(", ")
+    `[gen ${tag}] ${ms()} picks: ${categories.map((c, i) => `${c}/${formats[i]}`).join(", ")}`
   );
 
-  // 4. build context + generate + render + upload + insert — one post at a time
-  const externalStats = await listUnusedStats(6);
-  const recent = await recentPostSummaries(8);
+  // 4. build context + generate + render + upload + insert — both posts in parallel.
+  // Sequential was eating the 300s budget; parallelizing halves wall time to max(p1,p2).
+  const [externalStats, recent] = await Promise.all([
+    listUnusedStats(6),
+    recentPostSummaries(8),
+  ]);
+  console.log(`[gen ${tag}] ${ms()} ctx ready · ${externalStats.length} external stats, ${recent.length} recent posts`);
 
   const postIds: string[] = [];
-  for (let i = 0; i < categories.length; i++) {
-    const category = categories[i];
-    const format = formats[i];
-    try {
-      const postId = await buildOnePost({
-        run_id,
-        category,
-        format,
-        externalStats,
-        recent,
-      });
-      postIds.push(postId);
-    } catch (err) {
-      console.error(`[generate ${run_id.slice(0, 8)}] post ${category}/${format} failed:`, err);
+  const settled = await Promise.allSettled(
+    categories.map((category, i) =>
+      buildOnePost({ run_id, category, format: formats[i], externalStats, recent })
+        .then((id) => {
+          console.log(`[gen ${tag}] ${ms()} post ${category}/${formats[i]} done → ${id.slice(0, 8)}`);
+          return id;
+        })
+    )
+  );
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i];
+    if (r.status === "fulfilled") {
+      postIds.push(r.value);
+    } else {
+      const category = categories[i];
+      const format = formats[i];
+      console.error(`[gen ${tag}] ${ms()} post ${category}/${format} FAILED:`, r.reason);
       await notifyFailure({
         context: `generation.post.${category}.${format}`,
-        error: err,
+        error: r.reason,
         runId: run_id,
       });
     }
   }
+  console.log(`[gen ${tag}] ${ms()} all posts settled · ${postIds.length}/${categories.length} succeeded`);
 
   // 5. finalize run
   await sb
