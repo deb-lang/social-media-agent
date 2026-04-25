@@ -16,6 +16,30 @@ export default function ApprovalActions({
   const [feedback, setFeedback] = useState("");
   const [pending, setPending] = useState(false);
 
+  async function deletePost(reason?: string) {
+    if (!confirm("Delete this post? This is a soft-delete — the row stays in the database for audit but disappears from every view.")) {
+      return;
+    }
+    setPending(true);
+    try {
+      const res = await fetch(`/api/posts/${postId}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason ?? feedback.trim() || null }),
+      });
+      const payload = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !payload.ok) throw new Error(payload.error ?? "Failed to delete");
+      toast.success("Deleted");
+      setMode("idle");
+      setFeedback("");
+      onChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function approve() {
     setPending(true);
     try {
@@ -108,6 +132,18 @@ export default function ApprovalActions({
             Cancel
           </button>
         </div>
+        {/* Secondary action: completely delete instead of regenerating.
+            Shown only when the reviewer is already in feedback mode and
+            decides this post isn't worth saving. Reason from textarea
+            (if any) is included in the audit log. */}
+        <button
+          type="button"
+          onClick={() => deletePost()}
+          disabled={pending}
+          className="text-xs px-3 py-1.5 rounded-md border border-[#E8ECEF] bg-transparent text-[#8A9AAD] hover:text-[#B91C1C] hover:border-[#B91C1C] disabled:opacity-50 self-start"
+        >
+          Delete instead (no regenerate)
+        </button>
       </div>
     );
   }
@@ -129,6 +165,22 @@ export default function ApprovalActions({
         className="text-sm px-4 py-2.5 rounded-md border border-[#D4DBE1] bg-white text-[#153757] hover:bg-[#F6F7F9] disabled:opacity-50 font-medium"
       >
         Reject
+      </button>
+      {/* Direct delete — small trash icon button. Confirms before firing. */}
+      <button
+        type="button"
+        onClick={() => deletePost()}
+        disabled={pending || disabled}
+        title="Delete post (soft delete)"
+        aria-label="Delete post"
+        className="self-end p-1.5 rounded-md text-[#8A9AAD] hover:text-[#B91C1C] hover:bg-[#FDECEC] disabled:opacity-50 transition-colors"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          <path d="M10 11v6M14 11v6" />
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+        </svg>
       </button>
     </div>
   );

@@ -12,7 +12,8 @@ export type AuditAction =
   | "schedule_override"
   | "publish"
   | "fail"
-  | "recycle";
+  | "recycle"
+  | "delete";
 
 export interface AuditEntry {
   action: AuditAction;

@@ -35,10 +35,34 @@ export default function PostCard({
   onChange?: () => void;
 }) {
   const [slideIdx, setSlideIdx] = useState(0);
-  const [pending, setPending] = useState<null | "approve" | "reject">(null);
+  const [pending, setPending] = useState<null | "approve" | "reject" | "delete">(null);
   const [mode, setMode] = useState<"idle" | "rejecting">("idle");
   const [feedback, setFeedback] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+
+  async function deletePost() {
+    if (!confirm("Delete this post? Soft-delete — preserved in DB for audit but hidden from every view.")) {
+      return;
+    }
+    setPending("delete");
+    try {
+      const res = await fetch(`/api/posts/${post.id}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: feedback.trim() || null }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.ok) throw new Error(payload.error ?? "Failed");
+      toast.success("Deleted");
+      setMode("idle");
+      setFeedback("");
+      onChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setPending(null);
+    }
+  }
 
   const isCarousel = post.format === "carousel";
   const slides = post.carousel_slide_previews ?? [];
@@ -327,6 +351,30 @@ export default function PostCard({
             >
               Cancel
             </button>
+            {/* Delete instead — secondary, subtle. Reason from textarea
+                gets carried into the audit log if any. */}
+            <button
+              type="button"
+              onClick={deletePost}
+              disabled={pending !== null}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text-dim)",
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                letterSpacing: ".04em",
+                padding: "4px 0",
+                cursor: "pointer",
+                textAlign: "left",
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "#B54A44"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; }}
+            >
+              {pending === "delete" ? "Deleting…" : "Delete instead (no regenerate)"}
+            </button>
           </>
         ) : (
           <>
@@ -358,6 +406,48 @@ export default function PostCard({
                 {post.rejection_count} of 3 regens used
               </div>
             )}
+            {/* Trash icon — direct delete with confirm dialog. Subtle so it
+                doesn't compete with Approve / Reject as primary actions. */}
+            <button
+              type="button"
+              onClick={deletePost}
+              disabled={pending !== null}
+              title="Delete post (soft delete)"
+              aria-label="Delete post"
+              style={{
+                alignSelf: "center",
+                background: "transparent",
+                border: "1px solid transparent",
+                color: "var(--text-dim)",
+                padding: 6,
+                borderRadius: 8,
+                cursor: pending !== null ? "not-allowed" : "pointer",
+                opacity: pending === "delete" ? 0.5 : 1,
+                transition: "color 150ms, border-color 150ms, background 150ms",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 4,
+              }}
+              onMouseEnter={(e) => {
+                if (pending !== null) return;
+                e.currentTarget.style.color = "#B54A44";
+                e.currentTarget.style.borderColor = "#F5C8C8";
+                e.currentTarget.style.background = "#FDECEC";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-dim)";
+                e.currentTarget.style.borderColor = "transparent";
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
           </>
         )}
       </div>
