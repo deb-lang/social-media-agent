@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import type { PostListRow } from "@/lib/posts-helpers";
+import PostPreviewModal from "@/components/PostPreviewModal";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -81,6 +83,7 @@ export default function DashboardHome() {
 
   const nextScheduled = scheduledPosts[0];
   const recent = [...pendingPosts, ...scheduledPosts, ...publishedPosts].slice(0, 6);
+  const [previewPostId, setPreviewPostId] = useState<string | null>(null);
 
   // Sparkline series
   const impSeries = sparklinePoints(trend.map((t) => t.impressions));
@@ -378,8 +381,21 @@ export default function DashboardHome() {
               )}
             </div>
             {nextScheduled ? (
-              <div className="ns-grid">
-                <div className="ns-thumb">
+              <div
+                className="ns-grid"
+                role="button"
+                tabIndex={0}
+                onClick={() => setPreviewPostId(nextScheduled.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setPreviewPostId(nextScheduled.id);
+                  }
+                }}
+                style={{ cursor: "zoom-in" }}
+                aria-label="Open preview for next scheduled post"
+              >
+                <div className="ns-thumb" style={{ position: "relative" }}>
                   {nextScheduled.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -387,6 +403,34 @@ export default function DashboardHome() {
                       alt="Next scheduled"
                       style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 12 }}
                     />
+                  ) : nextScheduled.carousel_slide_previews && nextScheduled.carousel_slide_previews[0] ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={nextScheduled.carousel_slide_previews[0]}
+                        alt="Carousel slide 1"
+                        style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 12 }}
+                      />
+                      {nextScheduled.carousel_slide_previews.length > 1 && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            background: "rgba(15, 38, 64, 0.85)",
+                            color: "#fff",
+                            borderRadius: 999,
+                            padding: "3px 9px",
+                            fontFamily: "var(--font-mono)",
+                            fontSize: 10,
+                            letterSpacing: ".06em",
+                            fontWeight: 600,
+                          }}
+                        >
+                          1 / {nextScheduled.carousel_slide_previews.length}
+                        </span>
+                      )}
+                    </>
                   ) : nextScheduled.stat_value ? (
                     <div>
                       <div className="ns-num">{nextScheduled.stat_value}</div>
@@ -561,6 +605,13 @@ export default function DashboardHome() {
           </div>
         </div>
       </section>
+
+      {previewPostId && (
+        <PostPreviewModal
+          postId={previewPostId}
+          onClose={() => setPreviewPostId(null)}
+        />
+      )}
     </>
   );
 }
