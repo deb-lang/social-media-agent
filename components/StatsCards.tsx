@@ -59,7 +59,7 @@ export default function StatsCards() {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8A9AAD] mb-2">
             {item.label}
           </p>
-          <p className="font-[Manrope,sans-serif] font-bold text-3xl text-[#153757] tracking-tight">
+          <p className="font-[Poppins,sans-serif] font-bold text-3xl text-[#153757] tracking-tight">
             {item.value}
           </p>
           {item.sub && <p className="text-xs text-[#8A9AAD] mt-1">{item.sub}</p>}

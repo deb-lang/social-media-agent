@@ -71,7 +71,7 @@ export default function CalendarView({
         >
           ← Prev
         </button>
-        <h2 className="font-[Manrope,sans-serif] font-semibold text-lg text-[#153757]">
+        <h2 className="font-[Poppins,sans-serif] font-semibold text-lg text-[#153757]">
           {monthLabel}
         </h2>
         <button
