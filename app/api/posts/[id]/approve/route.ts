@@ -30,6 +30,7 @@ export async function POST(
   const { id } = await ctx.params;
   const body = await req.json().catch(() => ({}));
   const approvedBy = typeof body?.approved_by === "string" ? body.approved_by : "dashboard";
+  const postNow = body?.post_now === true;
 
   const sb = supabaseAdmin();
   const { data: post, error: fetchErr } = await sb
@@ -51,9 +52,15 @@ export async function POST(
     );
   }
 
-  // Recompute scheduled_for at approval time unless reviewer overrode it.
+  // Recompute scheduled_for at approval time. Three modes:
+  //   1. post_now=true → fire ASAP (60s buffer satisfies Publer's
+  //      "scheduled_at must be in the future" check)
+  //   2. schedule_override=true → reviewer picked a slot, honor it
+  //   3. otherwise → next auto slot for the format (Tue / Thu)
   let scheduled_for = post.scheduled_for as string | null;
-  if (!post.schedule_override) {
+  if (postNow) {
+    scheduled_for = new Date(Date.now() + 60_000).toISOString();
+  } else if (!post.schedule_override) {
     try {
       scheduled_for = getNextSlot(post.format === "carousel" ? "thu" : "tue");
     } catch (err) {
@@ -85,7 +92,11 @@ export async function POST(
     action: "approve",
     post_id: id,
     performed_by: approvedBy,
-    details: { scheduled_for, schedule_override: post.schedule_override },
+    details: {
+      scheduled_for,
+      schedule_override: post.schedule_override,
+      post_now: postNow,
+    },
     ip_address: req.headers.get("x-forwarded-for") ?? null,
   });
 

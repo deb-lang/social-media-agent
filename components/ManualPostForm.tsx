@@ -18,6 +18,8 @@ type CategoryValue = (typeof CATEGORIES)[number]["value"];
 const POLL_INTERVAL_MS = 4000;
 const MAX_POLLS = 75; // 5 min
 
+type Pending = null | "regenerate" | "schedule" | "post_now" | "delete";
+
 export default function ManualPostForm() {
   const [context, setContext] = useState("");
   const [urls, setUrls] = useState<string[]>([""]);
@@ -28,6 +30,10 @@ export default function ManualPostForm() {
   const [pollCount, setPollCount] = useState(0);
   const [generatedPost, setGeneratedPost] = useState<PostListRow | null>(null);
   const [showScheduler, setShowScheduler] = useState(false);
+  const [pending, setPending] = useState<Pending>(null);
+  const [regenMode, setRegenMode] = useState(false);
+  const [regenFeedback, setRegenFeedback] = useState("");
+  const [justRegenerated, setJustRegenerated] = useState(false);
 
   const charCount = context.length;
   const charValid = charCount >= 50 && charCount <= 2500;
@@ -136,10 +142,93 @@ export default function ManualPostForm() {
     setFormat("image");
     setGeneratedPost(null);
     setShowScheduler(false);
+    setRegenMode(false);
+    setRegenFeedback("");
+    setJustRegenerated(false);
+    setPending(null);
+  }
+
+  async function postNow() {
+    if (!generatedPost) return;
+    if (!confirm("Publish to LinkedIn now? This bypasses the review queue.")) return;
+    setPending("post_now");
+    try {
+      const res = await fetch(`/api/posts/${generatedPost.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_now: true }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+      toast.success(payload.dev_mode ? "Approved (DEV_MODE — Publer skipped)" : "Publishing now…");
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to publish");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function deletePost() {
+    if (!generatedPost) return;
+    if (!confirm("Delete this post? Soft-delete — preserved in DB for audit but hidden from every view.")) return;
+    setPending("delete");
+    try {
+      const res = await fetch(`/api/posts/${generatedPost.id}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: regenFeedback.trim() || null }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+      toast.success("Deleted");
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function regenerate() {
+    if (!generatedPost) return;
+    if (!regenFeedback.trim()) {
+      toast.error("Tell Claude what should be different.");
+      return;
+    }
+    setPending("regenerate");
+    try {
+      const res = await fetch(`/api/posts/${generatedPost.id}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: regenFeedback.trim() }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+      if (payload.reason === "max_regenerations_reached") {
+        toast.warning("Max regenerations reached — delete instead.");
+        return;
+      }
+      // Refetch the (same id) post — its assets and caption have been swapped.
+      const fresh = await fetch(`/api/posts/${generatedPost.id}`);
+      const freshData = await fresh.json();
+      if (freshData?.post) {
+        setGeneratedPost(freshData.post as PostListRow);
+      }
+      setJustRegenerated(true);
+      setRegenMode(false);
+      setRegenFeedback("");
+      toast.success("Regenerated with your feedback");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to regenerate");
+    } finally {
+      setPending(null);
+    }
   }
 
   // ─── Result view ──────────────────────────────────
   if (generatedPost) {
+    const busy = pending !== null;
     return (
       <div className="card" style={{ padding: 28, marginTop: 22 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
@@ -149,7 +238,10 @@ export default function ManualPostForm() {
             </span>
             Post ready
           </h3>
-          <span className="status ok">Ready</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {justRegenerated && <span className="chip warn">Regenerated</span>}
+            <span className="status ok">Ready</span>
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 24, alignItems: "flex-start" }}>
@@ -169,6 +261,9 @@ export default function ManualPostForm() {
               <span className="chip">{generatedPost.category}</span>
               <span className="chip neu">{generatedPost.format === "carousel" ? "Carousel · PDF" : "Image · 1200×1200"}</span>
               {generatedPost.compliance_status === "pass" && <span className="chip" style={{ background: "var(--success-bg)", color: "var(--success)" }}>Compliance pass</span>}
+              {generatedPost.rejection_count > 0 && (
+                <span className="chip warn">Regen ×{generatedPost.rejection_count}</span>
+              )}
             </div>
             <p className="cap" style={{ whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto" }}>
               {generatedPost.caption}
@@ -177,19 +272,138 @@ export default function ManualPostForm() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "flex-end" }}>
-          <button type="button" className="btn" onClick={resetForm}>
-            Generate another
-          </button>
-          <button type="button" className="btn teal" onClick={() => setShowScheduler(true)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
+        {/* Inline regenerate panel */}
+        {regenMode && (
+          <div style={{ marginTop: 22, padding: 16, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface-hover)" }}>
+            <label style={{ display: "block", marginBottom: 8, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: "var(--navy)" }}>
+              What should be different?
+            </label>
+            <textarea
+              autoFocus
+              rows={3}
+              value={regenFeedback}
+              onChange={(e) => setRegenFeedback(e.target.value)}
+              disabled={pending === "regenerate"}
+              placeholder="e.g., Make the stat more prominent. Lead with the cost, not the time. Tighten the second paragraph."
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                fontFamily: "var(--font-body)",
+                fontSize: 13,
+                color: "var(--text)",
+                lineHeight: 1.5,
+                resize: "vertical",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => { setRegenMode(false); setRegenFeedback(""); }}
+                disabled={pending === "regenerate"}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn teal"
+                onClick={regenerate}
+                disabled={pending === "regenerate" || !regenFeedback.trim()}
+              >
+                {pending === "regenerate" ? "Regenerating… (30–60s)" : "Submit & regenerate"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action bar */}
+        <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+          {/* Trash icon — left, subtle, matches PostCard.tsx soft-delete styling */}
+          <button
+            type="button"
+            onClick={deletePost}
+            disabled={busy}
+            title="Delete post (soft delete)"
+            aria-label="Delete post"
+            style={{
+              background: "transparent",
+              border: "1px solid transparent",
+              color: "var(--text-dim)",
+              padding: 8,
+              borderRadius: 8,
+              cursor: busy ? "not-allowed" : "pointer",
+              opacity: pending === "delete" ? 0.5 : 1,
+              transition: "color 150ms, border-color 150ms, background 150ms",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => {
+              if (busy) return;
+              e.currentTarget.style.color = "#B54A44";
+              e.currentTarget.style.borderColor = "#F5C8C8";
+              e.currentTarget.style.background = "#FDECEC";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "var(--text-dim)";
+              e.currentTarget.style.borderColor = "transparent";
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
             </svg>
-            Schedule this post
           </button>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={resetForm} disabled={busy}>
+              Generate another
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setRegenMode((m) => !m)}
+              disabled={busy}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              {regenMode ? "Hide feedback" : "Regenerate"}
+            </button>
+            <button
+              type="button"
+              className="btn teal"
+              onClick={() => setShowScheduler(true)}
+              disabled={busy}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              Schedule
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={postNow}
+              disabled={busy}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+              {pending === "post_now" ? "Publishing…" : "Post now"}
+            </button>
+          </div>
         </div>
 
         {showScheduler && (
