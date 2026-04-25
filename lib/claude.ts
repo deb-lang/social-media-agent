@@ -236,6 +236,9 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
 }> {
   if (ctx.format !== "carousel") throw new Error("generateCarouselPost requires format='carousel'");
   // Carousel output is larger (~6-8K tokens for 8 slides + caption). Stream it.
+  // SDK's messages.stream() accepts MessageStreamParams (= ParseableMessageCreateParams),
+  // NOT MessageCreateParamsStreaming — the latter requires `stream: true` which the
+  // streaming helper sets implicitly.
   const stream = client().messages.stream({
     model: CLAUDE_MODEL,
     max_tokens: 8192,
@@ -250,7 +253,7 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
     },
     system: systemBlocks(),
     messages: [{ role: "user", content: buildUserMessage(ctx) }],
-  } as Anthropic.MessageCreateParamsStreaming);
+  } as Anthropic.MessageStreamParams);
 
   const final = await stream.finalMessage();
   const textBlock = final.content.find((b) => b.type === "text");
