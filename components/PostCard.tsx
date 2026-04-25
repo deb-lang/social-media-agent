@@ -41,7 +41,7 @@ export default function PostCard({
   const [previewOpen, setPreviewOpen] = useState(false);
 
   async function deletePost() {
-    if (!confirm("Delete this post? Soft-delete — preserved in DB for audit but hidden from every view.")) {
+    if (!confirm("Delete this post permanently? The audit log of prior actions will be preserved.")) {
       return;
     }
     setPending("delete");
@@ -412,7 +412,7 @@ export default function PostCard({
               type="button"
               onClick={deletePost}
               disabled={pending !== null}
-              title="Delete post (soft delete)"
+              title="Delete post"
               aria-label="Delete post"
               style={{
                 alignSelf: "center",

@@ -1,14 +1,15 @@
-// POST /api/posts/[id]/delete — soft-deletes a post.
+// POST /api/posts/[id]/delete — hard-deletes a post.
 //
-// Soft-delete strategy: sets status='deleted' so the row is preserved for
-// audit/compliance. Every list query in the dashboard filters out
-// status=eq.deleted by default. To "undelete" (rare) you'd flip the status
-// back manually in Supabase.
+// The row is removed from the posts table. audit_log.post_id has
+// ON DELETE SET NULL, so the existing audit history for this post
+// survives (post_id becomes null on those rows). To make the deletion
+// itself recoverable in the audit trail, we write the audit entry
+// BEFORE the DELETE and stash the original post id + prior status
+// in the details JSONB.
 //
 // Refuses to delete posts that have already been published to LinkedIn —
-// those need to be retracted via Publer first or have status='published'
-// preserved for analytics. (Not enforced via DB constraint, just at this
-// API boundary.)
+// those need to be retracted via Publer first. (Not enforced via DB
+// constraint, just at this API boundary.)
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -39,9 +40,6 @@ export async function POST(
 
   const sb = supabaseAdmin();
 
-  // Look up the row first so we can:
-  // (a) refuse to delete already-published posts
-  // (b) include the prior status in the audit log
   const { data: existing, error: fetchErr } = await sb
     .from("posts")
     .select("id, status")
@@ -60,29 +58,26 @@ export async function POST(
       { status: 409 }
     );
   }
-  if (existing.status === "deleted") {
-    // Idempotent — already deleted
-    return NextResponse.json({ ok: true, already: true });
-  }
 
-  const { error: updateErr } = await sb
-    .from("posts")
-    .update({ status: "deleted" })
-    .eq("id", id);
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
-  }
-
+  // Audit BEFORE the row goes away — once the FK cascades, audit_log.post_id
+  // will be NULL on every prior row for this post, so we record the original
+  // id and prior state in details for forensic purposes.
   await logAction({
     action: "delete",
     post_id: id,
     performed_by: performedBy,
     details: {
+      original_post_id: id,
       prior_status: existing.status,
       reason: body.reason ?? null,
     },
     ip_address: req.headers.get("x-forwarded-for") ?? null,
   });
+
+  const { error: deleteErr } = await sb.from("posts").delete().eq("id", id);
+  if (deleteErr) {
+    return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, post_id: id });
 }

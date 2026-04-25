@@ -9,8 +9,7 @@ export type PostStatus =
   | "rejected"
   | "scheduled"
   | "published"
-  | "failed"
-  | "deleted"; // soft-deleted; filter out everywhere by default
+  | "failed";
 
 export type Platform = "linkedin" | "twitter" | "facebook";
 

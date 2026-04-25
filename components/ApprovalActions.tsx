@@ -17,7 +17,7 @@ export default function ApprovalActions({
   const [pending, setPending] = useState(false);
 
   async function deletePost(reason?: string) {
-    if (!confirm("Delete this post? This is a soft-delete — the row stays in the database for audit but disappears from every view.")) {
+    if (!confirm("Delete this post permanently? The audit log of prior actions will be preserved.")) {
       return;
     }
     setPending(true);
@@ -171,7 +171,7 @@ export default function ApprovalActions({
         type="button"
         onClick={() => deletePost()}
         disabled={pending || disabled}
-        title="Delete post (soft delete)"
+        title="Delete post"
         aria-label="Delete post"
         className="self-end p-1.5 rounded-md text-[#8A9AAD] hover:text-[#B91C1C] hover:bg-[#FDECEC] disabled:opacity-50 transition-colors"
       >

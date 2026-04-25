@@ -21,14 +21,7 @@ export async function GET(req: NextRequest) {
   const sb = supabaseAdmin();
   let q = sb.from("posts").select(POST_LIST_COLUMNS).order("created_at", { ascending: false });
 
-  if (status) {
-    // Caller can explicitly request deleted posts (e.g. an admin restore UI).
-    // Otherwise filter out deleted by default below.
-    q = q.eq("status", status);
-  } else {
-    // Default: exclude soft-deleted posts from every list view.
-    q = q.neq("status", "deleted");
-  }
+  if (status) q = q.eq("status", status);
   if (category) q = q.eq("category", category);
   if (format) q = q.eq("format", format);
   if (platform) q = q.eq("platform", platform);

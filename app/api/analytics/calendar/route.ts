@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
   const { data, error } = await sb
     .from("posts")
     .select("id, status, category, format, scheduled_for, published_at, caption, image_url, carousel_pdf_url")
-    .neq("status", "deleted")
     .or(
       `scheduled_for.gte.${from.toISOString()},published_at.gte.${from.toISOString()}`
     )

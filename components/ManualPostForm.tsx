@@ -171,7 +171,7 @@ export default function ManualPostForm() {
 
   async function deletePost() {
     if (!generatedPost) return;
-    if (!confirm("Delete this post? Soft-delete — preserved in DB for audit but hidden from every view.")) return;
+    if (!confirm("Delete this post permanently? The audit log of prior actions will be preserved.")) return;
     setPending("delete");
     try {
       const res = await fetch(`/api/posts/${generatedPost.id}/delete`, {
@@ -321,12 +321,12 @@ export default function ManualPostForm() {
 
         {/* Action bar */}
         <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
-          {/* Trash icon — left, subtle, matches PostCard.tsx soft-delete styling */}
+          {/* Trash icon — left, subtle, matches PostCard.tsx delete styling */}
           <button
             type="button"
             onClick={deletePost}
             disabled={busy}
-            title="Delete post (soft delete)"
+            title="Delete post"
             aria-label="Delete post"
             style={{
               background: "transparent",
