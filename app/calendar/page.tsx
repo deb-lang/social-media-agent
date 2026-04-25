@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import type { PostStatus } from "@/lib/posts-helpers";
+import PostPreviewModal from "@/components/PostPreviewModal";
 
 interface CalendarPost {
   id: string;
@@ -36,6 +37,7 @@ function monthString(date: Date): string {
 
 export default function CalendarPage() {
   const [cursor, setCursor] = useState(() => new Date());
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const monthParam = monthString(cursor);
   const [year, month] = monthParam.split("-").map(Number);
 
@@ -172,9 +174,13 @@ export default function CalendarPage() {
                     <>
                       <div className="cal-daynum">{cell.day}</div>
                       {cell.posts.slice(0, 4).map((p) => (
-                        <div
+                        <button
                           key={p.id}
+                          type="button"
+                          onClick={() => setPreviewId(p.id)}
                           className={`cal-pill ${STATUS_PILL_CLASS[p.status] ?? "sch"}`}
+                          style={{ border: "none", textAlign: "left", width: "100%", cursor: "pointer", background: "inherit" }}
+                          aria-label={`Preview post: ${p.caption.split("\n")[0].slice(0, 60)}`}
                         >
                           <div className="pt">
                             {p.status === "published"
@@ -188,7 +194,7 @@ export default function CalendarPage() {
                           <div className="pc">
                             {p.caption.split("\n")[0].slice(0, 36)}
                           </div>
-                        </div>
+                        </button>
                       ))}
                       {cell.posts.length > 4 && (
                         <div
@@ -256,6 +262,9 @@ export default function CalendarPage() {
             </div>
           </aside>
         </div>
+      )}
+      {previewId && (
+        <PostPreviewModal postId={previewId} onClose={() => setPreviewId(null)} />
       )}
     </section>
   );

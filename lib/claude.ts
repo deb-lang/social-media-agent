@@ -142,6 +142,15 @@ export interface GenerationContext {
     publication_date?: string;
   }>;
   rejectionFeedback?: string;
+  /**
+   * Manual context for ad-hoc posts (lead magnets, events, webinars).
+   * When present, Claude is told to *prioritize* this brief over the
+   * usual category-rotation framing — but still respects voice + stats rules.
+   */
+  manualContext?: {
+    context: string;
+    reference_urls?: string[];
+  };
 }
 
 // ─── Prompt builders ────────────────────────────────────
@@ -153,6 +162,17 @@ function buildUserMessage(ctx: GenerationContext): string {
   parts.push(
     `Generate ONE ${ctx.format === "carousel" ? "LinkedIn document carousel" : "LinkedIn image post"} in the ${ctx.category} category.`
   );
+
+  // Manual context takes priority — when set, the post must be ABOUT this brief
+  // (not about a generic category angle). Stats + voice rules still apply.
+  if (ctx.manualContext) {
+    parts.push(`\n# MANUAL BRIEF (this post is about this specifically — top priority)`);
+    parts.push(ctx.manualContext.context);
+    if (ctx.manualContext.reference_urls && ctx.manualContext.reference_urls.length) {
+      parts.push(`\n## REFERENCE URLS (cite or link these in the post)`);
+      parts.push(ctx.manualContext.reference_urls.map((u) => `- ${u}`).join("\n"));
+    }
+  }
 
   parts.push(`\n# APPROVED STATS (use only these — never invent numbers)`);
   parts.push(

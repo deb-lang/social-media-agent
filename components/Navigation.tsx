@@ -8,6 +8,7 @@ import GenerateButton from "./GenerateButton";
 const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/queue", label: "Queue" },
+  { href: "/new-post", label: "New post" },
   { href: "/calendar", label: "Calendar" },
   { href: "/history", label: "History" },
   { href: "/analytics", label: "Analytics" },

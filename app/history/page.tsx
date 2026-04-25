@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import type { PostListRow, PostStatus } from "@/lib/posts-helpers";
+import PostPreviewModal from "@/components/PostPreviewModal";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -76,6 +77,7 @@ function toCsv(posts: PostListRow[]): string {
 export default function HistoryPage() {
   const [filter, setFilter] = useState<Filter>("");
   const [search, setSearch] = useState("");
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const qs = useMemo(() => {
     const p = new URLSearchParams({ limit: "200" });
@@ -203,7 +205,11 @@ export default function HistoryPage() {
             </thead>
             <tbody>
               {rows.map((p) => (
-                <tr key={p.id}>
+                <tr
+                  key={p.id}
+                  onClick={() => setPreviewId(p.id)}
+                  style={{ cursor: "pointer" }}
+                >
                   <td
                     style={{
                       fontFamily: "var(--font-mono)",
@@ -242,6 +248,9 @@ export default function HistoryPage() {
             </tbody>
           </table>
         </div>
+      )}
+      {previewId && (
+        <PostPreviewModal postId={previewId} onClose={() => setPreviewId(null)} />
       )}
     </section>
   );

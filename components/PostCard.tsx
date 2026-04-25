@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import type { PostListRow } from "@/lib/posts-helpers";
+import PostPreviewModal from "./PostPreviewModal";
 
 const CATEGORY_LABEL: Record<string, string> = {
   stat_post: "Stat post",
@@ -37,6 +38,7 @@ export default function PostCard({
   const [pending, setPending] = useState<null | "approve" | "reject">(null);
   const [mode, setMode] = useState<"idle" | "rejecting">("idle");
   const [feedback, setFeedback] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const isCarousel = post.format === "carousel";
   const slides = post.carousel_slide_previews ?? [];
@@ -111,7 +113,15 @@ export default function PostCard({
       {/* Preview */}
       {isCarousel && nSlides > 0 ? (
         <div className="carousel-preview">
-          <div className="carousel-main">
+          <div
+            className="carousel-main"
+            onClick={() => setPreviewOpen(true)}
+            style={{ cursor: "zoom-in" }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter") setPreviewOpen(true); }}
+            aria-label="Open post preview"
+          >
             {slides[slideIdx] && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={slides[slideIdx]} alt={`Slide ${slideIdx + 1}`} />
@@ -121,7 +131,7 @@ export default function PostCard({
                 <button
                   type="button"
                   className="carousel-prev"
-                  onClick={() => setSlideIdx((i) => (i - 1 + nSlides) % nSlides)}
+                  onClick={(e) => { e.stopPropagation(); setSlideIdx((i) => (i - 1 + nSlides) % nSlides); }}
                   aria-label="Previous slide"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -131,7 +141,7 @@ export default function PostCard({
                 <button
                   type="button"
                   className="carousel-next"
-                  onClick={() => setSlideIdx((i) => (i + 1) % nSlides)}
+                  onClick={(e) => { e.stopPropagation(); setSlideIdx((i) => (i + 1) % nSlides); }}
                   aria-label="Next slide"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -157,7 +167,15 @@ export default function PostCard({
           </div>
         </div>
       ) : (
-        <div className={`preview ${post.stat_value ? "stat" : ""}`}>
+        <div
+          className={`preview ${post.stat_value ? "stat" : ""}`}
+          onClick={() => setPreviewOpen(true)}
+          style={{ cursor: "zoom-in" }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === "Enter") setPreviewOpen(true); }}
+          aria-label="Open post preview"
+        >
           {post.image_url ? (
             <Image src={post.image_url} alt="Post" fill unoptimized style={{ objectFit: "cover" }} />
           ) : post.stat_value ? (
@@ -343,6 +361,9 @@ export default function PostCard({
           </>
         )}
       </div>
+      {previewOpen && (
+        <PostPreviewModal postId={post.id} onClose={() => setPreviewOpen(false)} />
+      )}
     </article>
   );
 }

@@ -1,5 +1,5 @@
 // GET /api/posts — list posts with filters
-// Query params: status, category, format, platform, since, until, limit
+// Query params: status, category, format, platform, since, until, run_id, limit
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   const platform = sp.get("platform");
   const since = sp.get("since"); // ISO date
   const until = sp.get("until");
+  const runId = sp.get("run_id");
   const limit = Math.min(parseInt(sp.get("limit") ?? "100", 10) || 100, 200);
 
   const sb = supabaseAdmin();
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
   if (platform) q = q.eq("platform", platform);
   if (since) q = q.gte("created_at", since);
   if (until) q = q.lte("created_at", until);
+  if (runId) q = q.eq("generation_run_id", runId);
 
   q = q.limit(limit);
 
