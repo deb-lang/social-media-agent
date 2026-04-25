@@ -5,6 +5,7 @@ import { supabaseAdmin } from "./supabase";
 
 export type AuditAction =
   | "generate"
+  | "manual_generate"
   | "approve"
   | "reject"
   | "regenerate"
