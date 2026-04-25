@@ -36,40 +36,60 @@ interface PageHandle {
 
 declare global {
   // eslint-disable-next-line no-var
-  var __pp_browser: BrowserHandle | null | undefined;
+  var __pp_browserP: Promise<BrowserHandle> | null | undefined;
 }
 
+// Cache the LAUNCH PROMISE on globalThis so concurrent callers await the
+// same launch. If we cached only the resolved browser, 5 slides hitting
+// getBrowser() simultaneously when the browser isn't yet initialized would
+// each kick off their own chromium spawn — leading to ETXTBSY (binary busy
+// being decompressed from chromium.br by 5 processes at once).
 async function getBrowser(): Promise<BrowserHandle> {
-  // Reuse warm browser if alive
-  const existing = globalThis.__pp_browser;
-  if (existing && existing.isConnected()) return existing;
-
-  const puppeteer = (await import("puppeteer-core")) as unknown as PuppeteerCore;
-  const chromiumMod = (await import("@sparticuz/chromium")) as unknown as { default?: ChromiumModule } & ChromiumModule;
-  const chromium = (chromiumMod.default ?? chromiumMod) as ChromiumModule;
-
-  // @sparticuz/chromium options — graphics setting affects font rendering quality.
-  // Setting to true ensures emoji + complex Unicode work; cost is minor.
-  if (typeof (chromium as { setGraphicsMode?: boolean }).setGraphicsMode !== "undefined") {
-    (chromium as { setGraphicsMode: boolean }).setGraphicsMode = true;
+  // If a launch is in flight or completed, reuse it
+  if (globalThis.__pp_browserP) {
+    try {
+      const existing = await globalThis.__pp_browserP;
+      if (existing.isConnected()) return existing;
+    } catch {
+      /* fall through and relaunch */
+    }
+    globalThis.__pp_browserP = null;
   }
 
-  const executablePath = await (chromium as unknown as {
-    executablePath: () => Promise<string>;
-  }).executablePath();
+  // Kick off a single launch promise that all callers await
+  globalThis.__pp_browserP = (async (): Promise<BrowserHandle> => {
+    const puppeteer = (await import("puppeteer-core")) as unknown as PuppeteerCore;
+    const chromiumMod = (await import("@sparticuz/chromium")) as unknown as {
+      default?: ChromiumModule;
+    } & ChromiumModule;
+    const chromium = (chromiumMod.default ?? chromiumMod) as ChromiumModule;
 
-  const browser = (await (puppeteer as unknown as {
-    launch: (opts: unknown) => Promise<BrowserHandle>;
-  }).launch({
-    args: (chromium as unknown as { args: string[] }).args,
-    defaultViewport: (chromium as unknown as { defaultViewport: unknown }).defaultViewport,
-    executablePath,
-    headless: true,
-    ignoreHTTPSErrors: true,
-  })) as BrowserHandle;
+    if (typeof (chromium as { setGraphicsMode?: boolean }).setGraphicsMode !== "undefined") {
+      (chromium as { setGraphicsMode: boolean }).setGraphicsMode = true;
+    }
 
-  globalThis.__pp_browser = browser;
-  return browser;
+    const executablePath = await (chromium as unknown as {
+      executablePath: () => Promise<string>;
+    }).executablePath();
+
+    const browser = (await (puppeteer as unknown as {
+      launch: (opts: unknown) => Promise<BrowserHandle>;
+    }).launch({
+      args: (chromium as unknown as { args: string[] }).args,
+      defaultViewport: (chromium as unknown as { defaultViewport: unknown }).defaultViewport,
+      executablePath,
+      headless: true,
+      ignoreHTTPSErrors: true,
+    })) as BrowserHandle;
+    return browser;
+  })();
+
+  try {
+    return await globalThis.__pp_browserP;
+  } catch (err) {
+    globalThis.__pp_browserP = null;
+    throw err;
+  }
 }
 
 export interface RenderOptions {
