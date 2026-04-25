@@ -9,6 +9,7 @@
 // - Streaming for carousel generation (larger output).
 
 import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { CLAUDE_MODEL, VOICE_SYSTEM_PROMPT, type ContentCategory, type PostFormat } from "./constants";
 import type { ApprovedStat } from "./approved-stats";
@@ -210,17 +211,17 @@ export async function generateImagePost(ctx: GenerationContext): Promise<{
     thinking: { type: "adaptive" },
     output_config: {
       effort: "high",
-      format: {
-        type: "json_schema",
-        name: "image_post",
-        schema: zodToJsonSchema(ImagePostSchema),
-      },
+      format: zodOutputFormat(ImagePostSchema),
     },
     system: systemBlocks(),
     messages: [{ role: "user", content: buildUserMessage(ctx) }],
   } as Anthropic.MessageCreateParamsNonStreaming);
 
-  const parsed = ImagePostSchema.parse(res.parsed_output);
+  // The SDK's zodOutputFormat auto-parses res.parsed_output as the Zod type.
+  if (!res.parsed_output) {
+    throw new Error("Claude returned no parsed_output for image post");
+  }
+  const parsed = res.parsed_output as ImagePost;
   return {
     post: parsed,
     cacheHits: {
@@ -236,32 +237,25 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
 }> {
   if (ctx.format !== "carousel") throw new Error("generateCarouselPost requires format='carousel'");
   // Carousel output is larger (~6-8K tokens for 8 slides + caption). Stream it.
-  // SDK's messages.stream() accepts MessageStreamParams (= ParseableMessageCreateParams),
-  // NOT MessageCreateParamsStreaming — the latter requires `stream: true` which the
-  // streaming helper sets implicitly.
+  // SDK's messages.stream() accepts MessageStreamParams (= ParseableMessageCreateParams).
   const stream = client().messages.stream({
     model: CLAUDE_MODEL,
     max_tokens: 8192,
     thinking: { type: "adaptive" },
     output_config: {
       effort: "high",
-      format: {
-        type: "json_schema",
-        name: "carousel_post",
-        schema: zodToJsonSchema(CarouselPostSchema),
-      },
+      format: zodOutputFormat(CarouselPostSchema),
     },
     system: systemBlocks(),
     messages: [{ role: "user", content: buildUserMessage(ctx) }],
   } as Anthropic.MessageStreamParams);
 
   const final = await stream.finalMessage();
-  const textBlock = final.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Claude returned no text block for carousel");
+  // With zodOutputFormat, finalMessage() includes parsed_output.
+  if (!final.parsed_output) {
+    throw new Error("Claude returned no parsed_output for carousel");
   }
-  const raw = JSON.parse(textBlock.text);
-  const parsed = CarouselPostSchema.parse(raw);
+  const parsed = final.parsed_output as CarouselPost;
   return {
     post: parsed,
     cacheHits: {
