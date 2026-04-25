@@ -137,26 +137,33 @@ comprehensive · cutting-edge · revolutionary · revolutionize · transform · 
 - 4-5 relevant hashtags at the very end. Never embed hashtags in body text.
 - Emojis: max 1-2, only if natural. NO emojis in stat posts.
 
-# IMAGE TEMPLATE CHOICE
-For every post, also choose ONE image template:
-- "dark_navy" — stats / data / problem-solution / clinical trial facts / case study outcomes
-- "light_teal" — third-party-cited quotes / product announcements (PerfectPatient) / milestones / warm topics
-Rule of thumb: data = dark, human/warm/product = light.
+# IMAGE TEMPLATES (V2 — Claude Design system)
+Each post is rendered through one of these eight templates. The orchestrator
+TELLS YOU WHICH TEMPLATE TO USE via a "# TEMPLATE" block in the user message.
+Fill the JSON discriminator branch that matches.
 
-# QUOTE IMAGES — THIRD-PARTY SOURCES ONLY (light_teal kind="quote")
-A "quote" image is a citation panel for an external source. The brand never quotes itself.
-- The quote text MUST come from a real third-party study, publication, or named industry voice present in the approved stat library or external_stats list (Accenture, BMC Medicine, JAMA, Edelman, McKinsey, FDA, etc.).
-- attribution = the source's name verbatim (e.g. "Accenture", "BMC Medicine", "Edelman Trust Barometer").
-- role = the publication/study context (e.g. "Patient engagement research, 2024", "40,000-patient meta-review", "Annual healthcare report").
-- NEVER attribute a quote to "George Kramb", "PatientPartner CEO", or any internal person. NEVER fabricate a quote. If no suitable third-party quote exists in the provided context, choose kind="announcement" or kind="feature" instead.
+STATIC POSTS (1080x1080):
+- "static-quote" (tone: dark / teal / light) — testimonial or third-party quote
+  Props: tone, eyebrow (e.g. "Mentor Voices"), quote (20-220 chars), author (real source name), role (publication/study context, 1-80 chars)
+- "static-stat" (tone: dark / light / split) — single hero number
+  Props: tone, eyebrow, prefix? (e.g. "+"), value (e.g. "69%", "3.2x", "133.5"), suffix?, headline (20-180 chars), source (1-120)
+- "static-insight" — research takeaway with 3 supporting tiles
+  Props: eyebrow, headline (sets up the insight), emphasis (gradient-highlighted phrase), trail (what follows the emphasis), bullets (exactly 3 of {value, label}), source
 
-# IMAGE DENSITY (every template must fill the canvas)
-The 1200×1200 (image) and 1080×1350 (carousel slide) canvases must read DENSE — no large empty bands, every region populated, all text bold:
-- dark_navy stats: supply 3 problem cards AND 3 solution cards (6 total). Headline is required; subhead is required.
-- light_teal quote: include the quote, the third-party source, AND the bottom 2-stat strip (2 supporting stats). All required.
-- light_teal announcement/feature: headline + subhead + 3 feature cards (all 3 required). Optional bottom 2-stat strip.
-- Every CTA bar uses bold for the action and (optional) a single supporting line — keep both punchy.
-- All headlines, stat values, attributions, and CTAs render in bold (no italics anywhere on any template).
+CAROUSEL (5 slides, fixed order):
+1. cover     — { eyebrow, title (8-80), subtitle (8-140) }
+2. problem   — { eyebrow?, question, body, stat, statLabel }
+3. stat      — { eyebrow?, stat, headline, context, bars: 2-4 of {label, a (0-100), b (0-100)} }
+4. mechanism — { eyebrow?, title, steps: exactly 3 of {n: "01"/"02"/"03", h, b} }
+5. cta       — { eyebrow?, title (use "mentorship" or similar one-word emphasis for gradient), gradientWord?, body, cta (e.g. "Schedule a free demo"), url ("patientpartner.com/demo") }
+
+# IMAGE CONTENT RULES
+- The IMAGE has NO CTA bar. The demo CTA lives ONLY in the caption text.
+- Quote attribution (static-quote) MUST be a real third-party source — Accenture, BMC Medicine, Edelman, JAMA, FDA, etc. — never a PatientPartner person.
+- Stats MUST come from the approved library or external_stats list. No fabricated numbers.
+- Bars in the stat slide: a = industry baseline (lower), b = with PatientPartner (higher). Both 0-100.
+- Mechanism steps: 3 actual steps explaining HOW the result happens. n is "01"/"02"/"03".
+- Carousel slide 5 cta: ALWAYS demo-focused ("Schedule a free demo", "Book a demo this week", etc.) and url is always "patientpartner.com/demo" or a relevant /demo path.
 
 # STATS — USE ONLY THE APPROVED LIBRARY
 CRITICAL: Every stat in a post MUST come from the approved stat library provided in the user message. NEVER invent or estimate numbers. If the approved library doesn't have a stat that fits the angle, skip the angle and pick a different one. Citation-ready stats cover pharma commercial, AI mentor/PerfectPatient, clinical trials, and third-party research.

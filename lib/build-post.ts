@@ -17,22 +17,21 @@
 import { supabaseAdmin } from "./supabase";
 import { statsForCategory } from "./content-engine";
 import {
-  generateImagePost,
-  generateCarouselPost,
+  generateImagePostV2,
+  generateCarouselPostV2,
   reviewPost,
-  type GeneratedPost,
+  type ImagePostV2,
+  type CarouselPostV2,
   type RecentPostSummary,
 } from "./claude";
 import { checkCompliance } from "./compliance-checker";
 import { checkPlagiarism } from "./plagiarism-checker";
 import { buildCampaign, injectUtm } from "./utm";
 import { logAction } from "./audit";
-import {
-  buildSvg,
-  composeCarouselPdf,
-  renderImage,
-  renderSlidePng,
-} from "./image-generator";
+import { renderHtmlToPng, renderCarousel } from "./render-html";
+import { renderTemplate } from "./templates";
+import { renderSlide1, renderSlide2, renderSlide3, renderSlide4, renderSlide5 } from "./templates/carousel";
+import { pickTemplate } from "./category-map";
 import { uploadImagePng, uploadCarouselPdf, uploadSlidePreview } from "./storage";
 import type { ContentCategory, PostFormat } from "./constants";
 
@@ -87,14 +86,23 @@ export async function buildOnePost(opts: BuildPostOpts): Promise<string> {
     manualContext,
   };
 
-  let generated: GeneratedPost;
+  // Pick template via category-map for image posts. Carousels use the
+  // 5-slide flow regardless of category.
+  let generated: ImagePostV2 | CarouselPostV2;
   let cacheHits: { read: number; create: number };
+  let templatePick: { template: string; tone?: string } | null = null;
   if (format === "image") {
-    const out = await generateImagePost(genCtx);
+    templatePick = pickTemplate(category, format, run_id);
+    console.log(`[build ${tag}] ${category}/image picked template=${templatePick.template} tone=${templatePick.tone ?? "—"}`);
+    const out = await generateImagePostV2({
+      ...genCtx,
+      preselectedTemplate: templatePick.template as "static-quote" | "static-stat" | "static-insight",
+      preselectedTone: templatePick.tone as "dark" | "teal" | "light" | "split" | undefined,
+    });
     generated = out.post;
     cacheHits = out.cacheHits;
   } else {
-    const out = await generateCarouselPost(genCtx);
+    const out = await generateCarouselPostV2(genCtx);
     generated = out.post;
     cacheHits = out.cacheHits;
   }
@@ -150,12 +158,66 @@ export async function buildOnePost(opts: BuildPostOpts): Promise<string> {
   let carousel_slide_previews: string[] | null = null;
 
   if (generated.format === "image") {
-    const png = renderImage(generated.image);
+    // Render the chosen template (StaticQuote / StaticStat / StaticInsight)
+    // via Puppeteer + headless Chromium to a 1080×1080 PNG.
+    const c = generated.content;
+    let html: string;
+    if (c.template === "static-quote") {
+      html = renderTemplate({ template: "static-quote", props: c });
+    } else if (c.template === "static-stat") {
+      html = renderTemplate({ template: "static-stat", props: c });
+    } else {
+      html = renderTemplate({ template: "static-insight", props: c });
+    }
+    const png = await renderHtmlToPng(html);
     image_url = await uploadImagePng(png, { category, runId: run_id });
   } else {
-    const slideSvgs = generated.slides.map((s) => buildSvg(s));
-    const slidePngs = slideSvgs.map((svg) => renderSlidePng(svg));
-    const pdf = await composeCarouselPdf(slidePngs);
+    // Carousel: render 5 slides in parallel via the shared browser, then
+    // compose into a single PDF (pdf-lib).
+    const slideHtmls = [
+      renderSlide1({
+        eyebrow: generated.content.slides[0].eyebrow,
+        title: generated.content.slides[0].title,
+        subtitle: generated.content.slides[0].subtitle,
+        total: 5,
+      }),
+      renderSlide2({
+        eyebrow: generated.content.slides[1].eyebrow,
+        question: generated.content.slides[1].question,
+        body: generated.content.slides[1].body,
+        stat: generated.content.slides[1].stat,
+        statLabel: generated.content.slides[1].statLabel,
+        index: 2,
+        total: 5,
+      }),
+      renderSlide3({
+        eyebrow: generated.content.slides[2].eyebrow,
+        stat: generated.content.slides[2].stat,
+        headline: generated.content.slides[2].headline,
+        context: generated.content.slides[2].context,
+        bars: generated.content.slides[2].bars,
+        index: 3,
+        total: 5,
+      }),
+      renderSlide4({
+        eyebrow: generated.content.slides[3].eyebrow,
+        title: generated.content.slides[3].title,
+        steps: generated.content.slides[3].steps,
+        index: 4,
+        total: 5,
+      }),
+      renderSlide5({
+        eyebrow: generated.content.slides[4].eyebrow,
+        title: generated.content.slides[4].title,
+        gradientWord: generated.content.slides[4].gradientWord,
+        body: generated.content.slides[4].body,
+        cta: generated.content.slides[4].cta,
+        url: generated.content.slides[4].url,
+        index: 5,
+        total: 5,
+      }),
+    ];
+    const { pdf, slidePngs } = await renderCarousel(slideHtmls);
     carousel_pdf_url = await uploadCarouselPdf(pdf, { category, runId: run_id });
     carousel_slide_previews = await Promise.all(
       slidePngs.map((png, i) =>

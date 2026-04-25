@@ -10,11 +10,17 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // pdf-lib + @resvg/resvg-js are server-only native deps. Mark them as
-  // external so Next doesn't try to bundle them for the edge runtime.
-  // (Next.js 16 no longer runs ESLint at build time — `next lint` was
-  // removed; lint with `eslint .` separately.)
-  serverExternalPackages: ["@resvg/resvg-js", "pdf-lib"],
+  // Server-only native deps — bundler must not try to inline them.
+  // - @resvg/resvg-js + pdf-lib: legacy SVG/PDF path (still used by recycle/regenerate)
+  // - puppeteer-core + @sparticuz/chromium: new HTML→PNG path via headless browser
+  // - cheerio: scraper
+  serverExternalPackages: [
+    "@resvg/resvg-js",
+    "pdf-lib",
+    "puppeteer-core",
+    "@sparticuz/chromium",
+    "cheerio",
+  ],
 
   // TEMPORARY: ignore TS build errors so the critical TTF font fix can
   // deploy. Two parallel agents have been pushing fixes and there's a

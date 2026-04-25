@@ -109,6 +109,137 @@ export type ImagePost = z.infer<typeof ImagePostSchema>;
 export type CarouselPost = z.infer<typeof CarouselPostSchema>;
 export type GeneratedPost = ImagePost | CarouselPost;
 
+// ─── V2 Template Schemas (Claude Design template system) ─────
+// These drive the new lib/templates/* HTML rendering path. The legacy
+// ImagePostSchema / CarouselPostSchema above stay in place for the
+// recycle.ts and regenerate route which still use Resvg/SVG until
+// they're migrated separately.
+
+// Static template content shapes — match lib/templates/* component props 1:1.
+export const StaticQuoteContentSchema = z.object({
+  template: z.literal("static-quote"),
+  tone: z.enum(["dark", "teal", "light"]),
+  eyebrow: z.string().min(1).max(40),
+  quote: z.string().min(20).max(220),
+  author: z.string().min(1).max(60),
+  role: z.string().min(1).max(80),
+});
+
+export const StaticStatContentSchema = z.object({
+  template: z.literal("static-stat"),
+  tone: z.enum(["dark", "light", "split"]),
+  eyebrow: z.string().min(1).max(40),
+  prefix: z.string().max(8).optional(),
+  value: z.string().min(1).max(12),
+  suffix: z.string().max(8).optional(),
+  headline: z.string().min(20).max(180),
+  source: z.string().min(1).max(120),
+});
+
+export const StaticInsightContentSchema = z.object({
+  template: z.literal("static-insight"),
+  eyebrow: z.string().min(1).max(40),
+  headline: z.string().min(1).max(120),
+  emphasis: z.string().min(1).max(60),
+  trail: z.string().min(1).max(120),
+  bullets: z
+    .array(z.object({ value: z.string().min(1).max(12), label: z.string().min(1).max(80) }))
+    .length(3),
+  source: z.string().min(1).max(120),
+});
+
+export const StaticTemplateContentSchema = z.discriminatedUnion("template", [
+  StaticQuoteContentSchema,
+  StaticStatContentSchema,
+  StaticInsightContentSchema,
+]);
+
+// Carousel slide content — 5 distinct slide types in fixed order.
+export const Slide1ContentSchema = z.object({
+  kind: z.literal("cover"),
+  eyebrow: z.string().min(1).max(60),
+  title: z.string().min(8).max(80),
+  subtitle: z.string().min(8).max(140),
+});
+export const Slide2ContentSchema = z.object({
+  kind: z.literal("problem"),
+  eyebrow: z.string().min(1).max(40).optional(),
+  question: z.string().min(8).max(140),
+  body: z.string().min(20).max(220),
+  stat: z.string().min(1).max(12),
+  statLabel: z.string().min(1).max(80),
+});
+export const Slide3ContentSchema = z.object({
+  kind: z.literal("stat"),
+  eyebrow: z.string().min(1).max(40).optional(),
+  stat: z.string().min(1).max(12),
+  headline: z.string().min(8).max(120),
+  context: z.string().min(8).max(160),
+  bars: z
+    .array(
+      z.object({
+        label: z.string().min(1).max(40),
+        a: z.number().int().min(0).max(100),
+        b: z.number().int().min(0).max(100),
+      })
+    )
+    .min(2)
+    .max(4),
+});
+export const Slide4ContentSchema = z.object({
+  kind: z.literal("mechanism"),
+  eyebrow: z.string().min(1).max(40).optional(),
+  title: z.string().min(8).max(120),
+  steps: z
+    .array(
+      z.object({
+        n: z.string().min(1).max(4),
+        h: z.string().min(4).max(60),
+        b: z.string().min(8).max(160),
+      })
+    )
+    .length(3),
+});
+export const Slide5ContentSchema = z.object({
+  kind: z.literal("cta"),
+  eyebrow: z.string().min(1).max(40).optional(),
+  title: z.string().min(8).max(140),
+  gradientWord: z.string().min(2).max(20).optional(),
+  body: z.string().min(8).max(180),
+  cta: z.string().min(4).max(40),
+  url: z.string().min(4).max(80),
+});
+
+export const CarouselContentSchema = z.object({
+  template: z.literal("carousel"),
+  slides: z.tuple([
+    Slide1ContentSchema,
+    Slide2ContentSchema,
+    Slide3ContentSchema,
+    Slide4ContentSchema,
+    Slide5ContentSchema,
+  ]),
+});
+
+// V2 wrapper schemas — caption + hashtags + template content.
+export const ImagePostV2Schema = z.object({
+  ...PostShared,
+  format: z.literal("image"),
+  content: StaticTemplateContentSchema,
+});
+
+export const CarouselPostV2Schema = z.object({
+  ...PostShared,
+  format: z.literal("carousel"),
+  carousel_title: z.string().min(1).max(80),
+  content: CarouselContentSchema,
+});
+
+export type ImagePostV2 = z.infer<typeof ImagePostV2Schema>;
+export type CarouselPostV2 = z.infer<typeof CarouselPostV2Schema>;
+export type StaticTemplateContent = z.infer<typeof StaticTemplateContentSchema>;
+export type CarouselContent = z.infer<typeof CarouselContentSchema>;
+
 // ─── Client ─────────────────────────────────────────────
 
 let _client: Anthropic | null = null;
@@ -306,6 +437,101 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
   const parsed = res.parsed_output as CarouselPost;
   return {
     post: parsed,
+    cacheHits: {
+      read: res.usage.cache_read_input_tokens ?? 0,
+      create: res.usage.cache_creation_input_tokens ?? 0,
+    },
+  };
+}
+
+// ─── V2 generation (template-driven HTML rendering) ──────
+// These wrap messages.parse() against the new V2 schemas. The template
+// name is selected by the caller (lib/category-map.ts) and passed as
+// preselectedTemplate so Claude knows which discriminator branch to fill.
+
+export interface GenerateImageV2Opts extends GenerationContext {
+  preselectedTemplate: "static-quote" | "static-stat" | "static-insight";
+  preselectedTone?: "dark" | "teal" | "light" | "split";
+}
+
+function buildV2UserMessage(ctx: GenerateImageV2Opts | GenerationContext, isCarousel = false): string {
+  const base = buildUserMessage(ctx);
+  const v2 = "preselectedTemplate" in ctx ? ctx as GenerateImageV2Opts : null;
+  const lines: string[] = [base];
+  if (v2) {
+    lines.push("");
+    lines.push(`# TEMPLATE`);
+    lines.push(`The image will render via the "${v2.preselectedTemplate}" template${v2.preselectedTone ? ` (tone="${v2.preselectedTone}")` : ""}. Fill the discriminated-union "content" field with that template's exact shape.`);
+  }
+  if (isCarousel) {
+    lines.push("");
+    lines.push(`# CAROUSEL STRUCTURE (5 slides, fixed order)`);
+    lines.push(`1. cover — eyebrow + title + subtitle (the hook)`);
+    lines.push(`2. problem — question + body + a stat callout`);
+    lines.push(`3. stat — hero number + headline + context + 2-4 comparative bars (industry baseline vs PatientPartner)`);
+    lines.push(`4. mechanism — title + 3 steps (n=01/02/03, h=headline, b=body) explaining HOW the result happens`);
+    lines.push(`5. cta — title (with one word for gradient highlight, default 'mentorship'), body, cta='Schedule a free demo' style action, url='patientpartner.com/demo'`);
+  }
+  return lines.join("\n");
+}
+
+export async function generateImagePostV2(opts: GenerateImageV2Opts): Promise<{
+  post: ImagePostV2;
+  cacheHits: { read: number; create: number };
+}> {
+  if (opts.format !== "image") throw new Error("generateImagePostV2 requires format='image'");
+  console.log(`[claude:imageV2] starting · template=${opts.preselectedTemplate} · tone=${opts.preselectedTone ?? "—"} · category=${opts.category}`);
+  const t0 = Date.now();
+  const res = await client().messages.parse({
+    model: CLAUDE_MODEL,
+    max_tokens: 4096,
+    thinking: { type: "adaptive" },
+    output_config: {
+      effort: "high",
+      format: zodOutputFormat(ImagePostV2Schema),
+    },
+    system: systemBlocks(),
+    messages: [{ role: "user", content: buildV2UserMessage(opts) }],
+  } as Anthropic.MessageCreateParamsNonStreaming);
+  console.log(`[claude:imageV2] returned in ${((Date.now() - t0)/1000).toFixed(1)}s · stop=${res.stop_reason} · parsed=${res.parsed_output ? 'ok' : 'NULL'}`);
+
+  if (!res.parsed_output) {
+    throw new Error(`Claude returned no parsed_output for image V2 (stop_reason=${res.stop_reason})`);
+  }
+  return {
+    post: res.parsed_output as ImagePostV2,
+    cacheHits: {
+      read: res.usage.cache_read_input_tokens ?? 0,
+      create: res.usage.cache_creation_input_tokens ?? 0,
+    },
+  };
+}
+
+export async function generateCarouselPostV2(ctx: GenerationContext): Promise<{
+  post: CarouselPostV2;
+  cacheHits: { read: number; create: number };
+}> {
+  if (ctx.format !== "carousel") throw new Error("generateCarouselPostV2 requires format='carousel'");
+  console.log(`[claude:carouselV2] starting · category=${ctx.category}`);
+  const t0 = Date.now();
+  const res = await client().messages.parse({
+    model: CLAUDE_MODEL,
+    max_tokens: 8192,
+    thinking: { type: "adaptive" },
+    output_config: {
+      effort: "high",
+      format: zodOutputFormat(CarouselPostV2Schema),
+    },
+    system: systemBlocks(),
+    messages: [{ role: "user", content: buildV2UserMessage(ctx, true) }],
+  } as Anthropic.MessageCreateParamsNonStreaming);
+  console.log(`[claude:carouselV2] returned in ${((Date.now() - t0)/1000).toFixed(1)}s · stop=${res.stop_reason} · parsed=${res.parsed_output ? 'ok' : 'NULL'}`);
+
+  if (!res.parsed_output) {
+    throw new Error(`Claude returned no parsed_output for carousel V2 (stop_reason=${res.stop_reason})`);
+  }
+  return {
+    post: res.parsed_output as CarouselPostV2,
     cacheHits: {
       read: res.usage.cache_read_input_tokens ?? 0,
       create: res.usage.cache_creation_input_tokens ?? 0,
