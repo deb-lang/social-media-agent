@@ -12,7 +12,7 @@
 // No CTA bar — caption holds the demo CTA.
 
 import { COLORS, FONTS } from "./tokens";
-import { esc, eyebrow, footerStrap, htmlDoc, logoMark, wordmark } from "./shared";
+import { esc, eyebrow, footerStrap, htmlDoc, logo } from "./shared";
 
 export interface StaticQuoteProps {
   tone: "dark" | "teal" | "light";
@@ -39,8 +39,7 @@ export function renderStaticQuote(p: StaticQuoteProps): string {
   <!-- Header row: logo + eyebrow -->
   <div style="display:flex; align-items:center; justify-content:space-between; gap:24px; position:relative; z-index:1;">
     <div style="display:flex; align-items:center; gap:14px;">
-      ${logoMark()}
-      ${wordmark(palette.brand)}
+      ${logo()}
     </div>
     ${eyebrow(eyebrowText, palette.eyebrow)}
   </div>

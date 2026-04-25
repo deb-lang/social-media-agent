@@ -4,7 +4,7 @@
 // every slide except the cover.
 
 import { COLORS, FONTS } from "./tokens";
-import { esc, eyebrow, footerStrap, htmlDoc, logoMark, wordmark } from "./shared";
+import { esc, eyebrow, footerStrap, htmlDoc, logo } from "./shared";
 
 // ── Pagination strip (small "n / total") used on slides 2–5 ──
 function pagination(idx: number, total: number, tone: "dark" | "light"): string {
@@ -51,8 +51,7 @@ export function renderSlide1(p: Slide1Props): string {
 
   <!-- Header: logo -->
   <div style="display:flex; align-items:center; gap:14px; position:relative; z-index:2;">
-    ${logoMark()}
-    ${wordmark(COLORS.white)}
+    ${logo()}
   </div>
 
   <!-- Eyebrow + title block, centered vertically -->
@@ -145,8 +144,7 @@ export function renderSlide2(p: Slide2Props): string {
   <!-- Header -->
   <div style="display:flex; align-items:center; justify-content:space-between; gap:24px; position:relative; z-index:2;">
     <div style="display:flex; align-items:center; gap:14px;">
-      ${logoMark()}
-      ${wordmark(COLORS.navy)}
+      ${logo()}
     </div>
     ${eyebrow(eyebrowText, COLORS.mintPrimary)}
   </div>
@@ -273,8 +271,7 @@ export function renderSlide3(p: Slide3Props): string {
   <!-- Header -->
   <div style="display:flex; align-items:center; justify-content:space-between; gap:24px; position:relative; z-index:2;">
     <div style="display:flex; align-items:center; gap:14px;">
-      ${logoMark()}
-      ${wordmark(COLORS.navy)}
+      ${logo()}
     </div>
     ${eyebrow(eyebrowText, COLORS.mintPrimary)}
   </div>
@@ -420,8 +417,7 @@ export function renderSlide4(p: Slide4Props): string {
   <!-- Header -->
   <div style="display:flex; align-items:center; justify-content:space-between; gap:24px; position:relative; z-index:2;">
     <div style="display:flex; align-items:center; gap:14px;">
-      ${logoMark()}
-      ${wordmark(COLORS.navy)}
+      ${logo()}
     </div>
     ${eyebrow(eyebrowText, COLORS.mintPrimary)}
   </div>
@@ -504,8 +500,7 @@ export function renderSlide5(p: Slide5Props): string {
 
   <!-- Header -->
   <div style="display:flex; align-items:center; gap:14px; position:relative; z-index:2;">
-    ${logoMark()}
-    ${wordmark(COLORS.white)}
+    ${logo()}
   </div>
 
   <!-- Eyebrow + Title -->

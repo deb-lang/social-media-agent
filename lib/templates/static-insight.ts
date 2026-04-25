@@ -8,7 +8,7 @@
 // 1080×1080. No CTA bar.
 
 import { COLORS, FONTS } from "./tokens";
-import { esc, eyebrow, footerStrap, htmlDoc, logoMark, wordmark } from "./shared";
+import { esc, eyebrow, footerStrap, htmlDoc, logo } from "./shared";
 
 export interface InsightBullet {
   value: string;
@@ -75,8 +75,7 @@ export function renderStaticInsight(p: StaticInsightProps): string {
   <!-- Header: logo + eyebrow -->
   <div style="display:flex; align-items:center; justify-content:space-between; gap:24px; position:relative; z-index:2;">
     <div style="display:flex; align-items:center; gap:14px;">
-      ${logoMark()}
-      ${wordmark(COLORS.navy)}
+      ${logo()}
     </div>
     ${eyebrow(eyebrowText, COLORS.mintPrimary)}
   </div>

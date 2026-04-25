@@ -2,6 +2,8 @@
 // to get a complete, render-ready HTML document with Google Fonts loaded
 // and the design-tokens CSS variables in scope.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { COLORS, FONTS, GOOGLE_FONTS_HREF, CANVAS } from "./tokens";
 
 // HTML-escape every interpolated string. Templates pass user/Claude-supplied
@@ -14,24 +16,33 @@ export const esc = (s: unknown): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-// Brand mark — same SVG used across every template (top-left ~80px tall).
-// Mirrors the bundler placeholder shape: rounded square with "PP" inside +
-// teal underscore mark. Inline so it renders deterministically without
-// depending on a network image.
-export function logoMark(): string {
-  return `
-<svg width="64" height="64" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <rect x="60" y="60" width="480" height="480" rx="40" fill="${COLORS.navy}" stroke="${COLORS.mint}" stroke-width="3"/>
-  <text x="300" y="380" font-family="Poppins, sans-serif" font-weight="800" font-size="240" fill="${COLORS.mint}" text-anchor="middle" letter-spacing="-8">PP</text>
-  <rect x="120" y="430" width="60" height="8" rx="4" fill="${COLORS.mint}"/>
-  <rect x="200" y="430" width="200" height="8" rx="4" fill="${COLORS.mintPrimary}" opacity="0.5"/>
-  <rect x="420" y="430" width="60" height="8" rx="4" fill="${COLORS.mintPrimary}" opacity="0.5"/>
-</svg>`.trim();
+// Real PatientPartner logo — 1995×518 (3.85:1) teal-on-transparent PNG
+// committed at public/logo.png. Lazily loaded + base64-cached so we read
+// the file at most once per warm container.
+let _logoB64: string | null = null;
+function logoBase64(): string {
+  if (_logoB64) return _logoB64;
+  const path = join(process.cwd(), "public", "logo.png");
+  _logoB64 = readFileSync(path).toString("base64");
+  return _logoB64;
 }
 
-// Brand wordmark "PatientPartner" used inline alongside or instead of the mark.
-export function wordmark(color: string = COLORS.navy): string {
-  return `<span style="font-family:${FONTS.display}; font-weight:800; font-size:24px; letter-spacing:-0.02em; color:${color};">PatientPartner</span>`;
+// Render the official wordmark+icon as an <img>. Use this in every template
+// header — the logo includes both the "PatientPartner" wordmark and the
+// stethoscope-in-speech-bubble icon, so no separate wordmark needed.
+//
+// Default height 60px → ~231px wide. Mode controls visual weight on
+// dark vs light backgrounds (the PNG itself is teal-only with transparent
+// background, so it works on both, but we may want a slight tint shift).
+export function logo(opts: { height?: number } = {}): string {
+  const h = opts.height ?? 60;
+  return `<img src="data:image/png;base64,${logoBase64()}" alt="PatientPartner" style="height:${h}px; width:auto; display:block;" />`;
+}
+
+// Smaller logo variant for the footer strap.
+export function logoSmall(opts: { height?: number } = {}): string {
+  const h = opts.height ?? 22;
+  return `<img src="data:image/png;base64,${logoBase64()}" alt="PatientPartner" style="height:${h}px; width:auto; display:block;" />`;
 }
 
 // Eyebrow — small uppercase label used at top of most templates.
@@ -40,19 +51,14 @@ export function eyebrow(text: string, color: string = COLORS.mintPrimary): strin
   return `<div style="font-family:${FONTS.body}; font-weight:600; font-size:14px; letter-spacing:0.14em; text-transform:uppercase; color:${color};">${esc(text)}</div>`;
 }
 
-// Footer strap — small line at bottom of post (e.g. logo + URL).
+// Footer strap — small line at bottom of post (logo + URL).
 // Used across every template to maintain brand consistency.
 export function footerStrap(opts: { url?: string; tone: "dark" | "light" } = { tone: "light" }): string {
   const fg = opts.tone === "dark" ? COLORS.mintLight : COLORS.mintPrimary;
   const url = opts.url ?? "patientpartner.com";
   return `
 <div style="display:flex; align-items:center; gap:12px; font-family:${FONTS.body}; font-size:14px; font-weight:600; color:${fg}; letter-spacing:0.04em;">
-  <span style="display:inline-flex; width:24px; height:24px; align-items:center; justify-content:center;">
-    <svg width="20" height="20" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
-      <rect x="60" y="60" width="480" height="480" rx="60" fill="${fg}"/>
-      <text x="300" y="380" font-family="Poppins, sans-serif" font-weight="800" font-size="240" fill="${opts.tone === "dark" ? COLORS.navy : COLORS.white}" text-anchor="middle" letter-spacing="-8">PP</text>
-    </svg>
-  </span>
+  ${logoSmall({ height: 22 })}
   <span>${esc(url)}</span>
 </div>`.trim();
 }
