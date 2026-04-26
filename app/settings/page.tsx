@@ -21,11 +21,21 @@ function findCheck(checks: HealthCheck[], name: string): HealthCheck | undefined
   return checks.find((c) => c.name === name);
 }
 
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 5_000) return "just now";
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+  return `${Math.round(ms / 3_600_000)}h ago`;
+}
+
 export default function SettingsPage() {
   const { data, mutate } = useSWR<HealthResp>("/api/health", fetcher, {
     refreshInterval: 60_000,
   });
   const [running, setRunning] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [verifiedAt, setVerifiedAt] = useState<Record<string, string>>({});
 
   const checks = data?.checks ?? [];
   const supabase = findCheck(checks, "supabase");
@@ -54,6 +64,40 @@ export default function SettingsPage() {
     } finally {
       setRunning(null);
     }
+  }
+
+  async function verifyIntegration(name: string) {
+    setVerifying(name);
+    try {
+      // Always re-run /api/health; Publer additionally pulls fresh insights.
+      const tasks: Array<Promise<unknown>> = [mutate()];
+      if (name === "Publer" || name === "LinkedIn") {
+        tasks.push(
+          fetch("/api/analytics/sync", { method: "POST" }).then((r) => r.json())
+        );
+      }
+      const [, syncResult] = await Promise.all(tasks);
+      setVerifiedAt((prev) => ({ ...prev, [name]: new Date().toISOString() }));
+      const desc =
+        syncResult && typeof syncResult === "object"
+          ? `synced ${(syncResult as { synced?: number }).synced ?? 0} · failed ${(syncResult as { failed?: number }).failed ?? 0}`
+          : "Health probe re-run";
+      toast.success(`${name} verified`, { description: desc });
+    } catch (err) {
+      toast.error(`${name} verify failed`, {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setVerifying(null);
+    }
+  }
+
+  function showRotateHint(name: string, envVar: string | undefined) {
+    const which = envVar || "the env var";
+    toast.info(`Rotate ${name}`, {
+      description: `Update ${which} in Vercel → Settings → Environment Variables, then redeploy. Token rotation from this UI is not wired yet.`,
+      duration: 7000,
+    });
   }
 
   const integrations: Array<{
@@ -132,39 +176,110 @@ export default function SettingsPage() {
       </p>
 
       <div className="intg">
-        {integrations.map((i) => (
-          <div key={i.name} className="card int">
-            <div className="int-head">
-              <div className={`int-logo ${i.logo}`}>{i.short}</div>
-              <div style={{ minWidth: 0 }}>
-                <p className="int-name">{i.name}</p>
-                <p className="int-meta">{i.detail}</p>
+        {integrations.map((i) => {
+          const isVerifying = verifying === i.name;
+          const lastVerified = verifiedAt[i.name];
+          const syncable = i.name === "Publer" || i.name === "LinkedIn";
+          return (
+            <div
+              key={i.name}
+              className="card int"
+              role="button"
+              tabIndex={0}
+              onClick={() => !isVerifying && verifyIntegration(i.name)}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && !isVerifying) {
+                  e.preventDefault();
+                  verifyIntegration(i.name);
+                }
+              }}
+              style={{
+                cursor: isVerifying ? "wait" : "pointer",
+                position: "relative",
+                opacity: isVerifying ? 0.7 : 1,
+                transition: "opacity 150ms",
+              }}
+              aria-label={`${i.name} — click to ${syncable ? "sync and re-verify" : "re-verify"}`}
+            >
+              <div className="int-head">
+                <div className={`int-logo ${i.logo}`}>{i.short}</div>
+                <div style={{ minWidth: 0 }}>
+                  <p className="int-name">{i.name}</p>
+                  <p className="int-meta">{i.detail}</p>
+                </div>
               </div>
-            </div>
-            {!i.ok && i.missing && (
-              <p
+              {!i.ok && i.missing && (
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "var(--warning)",
+                    fontFamily: "var(--font-mono)",
+                    letterSpacing: ".03em",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Missing: {i.missing}
+                </p>
+              )}
+              <div className="int-foot">
+                <strong>{i.ok ? "Connected" : "Not configured"}</strong>
+                <span
+                  className={`status ${i.ok ? "ok" : "warn"}`}
+                  style={{ padding: "3px 8px" }}
+                >
+                  {isVerifying ? "Verifying…" : i.ok ? "Live" : "Pending"}
+                </span>
+              </div>
+              <div
                 style={{
-                  fontSize: 11,
-                  color: "var(--warning)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: 10,
+                  paddingTop: 10,
+                  borderTop: "1px solid var(--border)",
                   fontFamily: "var(--font-mono)",
-                  letterSpacing: ".03em",
-                  lineHeight: 1.4,
+                  fontSize: 10.5,
+                  letterSpacing: ".06em",
+                  color: "var(--text-dim)",
                 }}
               >
-                Missing: {i.missing}
-              </p>
-            )}
-            <div className="int-foot">
-              <strong>{i.ok ? "Connected" : "Not configured"}</strong>
-              <span
-                className={`status ${i.ok ? "ok" : "warn"}`}
-                style={{ padding: "3px 8px" }}
-              >
-                {i.ok ? "Live" : "Pending"}
-              </span>
+                <span>
+                  {lastVerified
+                    ? `Verified ${timeAgo(lastVerified)}`
+                    : syncable
+                      ? "Click to sync"
+                      : "Click to verify"}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    showRotateHint(i.name, i.missing?.split(",")[0]?.trim());
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-dim)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10.5,
+                    letterSpacing: ".06em",
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                    padding: 0,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 3,
+                  }}
+                  title="Rotate token (placeholder)"
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--teal-dark)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; }}
+                >
+                  Rotate
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mini" style={{ marginTop: 44 }}>
