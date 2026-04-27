@@ -25,6 +25,9 @@ import {
 import { buildOnePost } from "@/lib/build-post";
 import { notifyFailure, notifyReadyForReview } from "@/lib/slack";
 import { authorizeCron } from "@/lib/cron-auth";
+import { rankCategories, highConfidenceWeights, type RankablePost } from "@/lib/recommender";
+import { logAction } from "@/lib/audit";
+import type { ContentCategory } from "@/lib/constants";
 
 // 800s is the Vercel Pro Fluid Compute ceiling. Two sequential Claude
 // generations with effort=high + adaptive thinking + 5K-token cached system
@@ -130,12 +133,55 @@ async function runGeneration(run_id: string) {
     console.warn(`[gen ${tag}] ${ms()} stat-finder failed (non-fatal):`, err);
   }
 
-  // 3. pick categories + assign formats
-  const categories = await pickCategories(2);
+  // 3. pick categories + assign formats. Read recommender first so winners
+  // bias the rotation. Recommender is non-fatal — any failure falls back to
+  // pure LRU. Audit log records whether weighting fired so cron decisions are
+  // forensically traceable.
+  let performanceWeights: Record<ContentCategory, number> | undefined;
+  let recommenderUsed = false;
+  let recommenderEligible = 0;
+  try {
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    const { data: perfPosts } = await sb
+      .from("posts")
+      .select("category, published_at, impressions, engagement_rate")
+      .eq("status", "published")
+      .not("published_at", "is", null)
+      .gte("published_at", ninetyDaysAgo);
+    const rankings = rankCategories((perfPosts ?? []) as RankablePost[]);
+    const weights = highConfidenceWeights(rankings);
+    const someWinner = Object.values(weights).some((w) => w > 0);
+    if (someWinner) {
+      performanceWeights = weights;
+      recommenderUsed = true;
+    }
+    recommenderEligible = rankings.filter((r) => r.confidence !== "insufficient").length;
+    console.log(
+      `[gen ${tag}] ${ms()} recommender · used=${recommenderUsed} · eligible=${recommenderEligible}`
+    );
+  } catch (err) {
+    console.warn(`[gen ${tag}] ${ms()} recommender failed (non-fatal):`, err);
+  }
+
+  const categories = await pickCategories(2, { performanceWeights });
   const formats = assignFormats(categories);
   console.log(
     `[gen ${tag}] ${ms()} picks: ${categories.map((c, i) => `${c}/${formats[i]}`).join(", ")}`
   );
+
+  // Audit which categories were chosen and why (recommender on/off, weights used).
+  await logAction({
+    action: "generate",
+    post_id: null,
+    performed_by: "system",
+    details: {
+      run_id,
+      picks: categories.map((c, i) => ({ category: c, format: formats[i] })),
+      recommender_used: recommenderUsed,
+      recommender_eligible_count: recommenderEligible,
+      performance_weights: performanceWeights ?? null,
+    },
+  });
 
   // 4. build context + generate + render + upload + insert — both posts in parallel.
   // Sequential was eating the 300s budget; parallelizing halves wall time to max(p1,p2).

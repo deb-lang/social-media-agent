@@ -10,13 +10,27 @@ import type { RecentPostSummary } from "./claude";
 
 // ─── Category rotation ─────────────────────────────────
 
+export interface PickCategoriesOptions {
+  /**
+   * Optional 0..1 weights from the recommender. When provided AND at least
+   * one weight is > 0, picks are biased toward winners. When absent or all
+   * zero, behavior reduces to pure LRU rotation. Always reserves >=1 of N
+   * picks for a non-winning category to preserve mix coverage.
+   */
+  performanceWeights?: Record<ContentCategory, number>;
+}
+
 /**
- * Pick N categories least recently used. Falls back to random order if we
- * don't have enough history. Never picks the same category twice in one run.
- *
- * Rule: within 2 runs, don't repeat `lead_magnet` (prevents over-promotion).
+ * Pick N categories. Default behavior: least recently used rotation, with a
+ * 2-run cooldown on `lead_magnet`. When `performanceWeights` is supplied with
+ * at least one positive value, picks combine LRU + performance:
+ *   score = lruScore * 0.4 + performanceWeight * 0.6
+ * and at least one pick is reserved for a non-winning category.
  */
-export async function pickCategories(count = 2): Promise<ContentCategory[]> {
+export async function pickCategories(
+  count = 2,
+  opts: PickCategoriesOptions = {}
+): Promise<ContentCategory[]> {
   const sb = supabaseAdmin();
   const { data, error } = await sb
     .from("posts")
@@ -32,14 +46,29 @@ export async function pickCategories(count = 2): Promise<ContentCategory[]> {
     if (!recency.has(r.category)) recency.set(r.category, i);
   });
 
-  // Sort categories by least recent first (higher index, or unseen = Infinity).
-  const sorted = [...CONTENT_CATEGORIES].sort((a, b) => {
-    const ra = recency.get(a) ?? Infinity;
-    const rb = recency.get(b) ?? Infinity;
-    return rb - ra;
-  });
+  const weights = opts.performanceWeights;
+  const winners = weights
+    ? new Set(
+        (Object.entries(weights) as [ContentCategory, number][])
+          .filter(([, w]) => w > 0)
+          .map(([cat]) => cat)
+      )
+    : new Set<ContentCategory>();
 
-  // Pull top N, but if both lead_magnets would fit in recent history, swap.
+  // Normalized LRU score: 0 (most recent) → 1 (never seen). Higher = pick first.
+  const denom = Math.max(rows.length, 1);
+  const lruScore = (cat: ContentCategory): number => {
+    const r = recency.get(cat);
+    if (r === undefined) return 1.0;
+    return r / denom;
+  };
+
+  // Hybrid score. With no winners, weight is zero → behavior reduces to LRU.
+  const score = (cat: ContentCategory): number =>
+    lruScore(cat) * 0.4 + (weights?.[cat] ?? 0) * 0.6;
+
+  const sorted = [...CONTENT_CATEGORIES].sort((a, b) => score(b) - score(a));
+
   const picks: ContentCategory[] = [];
   for (const cat of sorted) {
     if (picks.length >= count) break;
@@ -49,11 +78,20 @@ export async function pickCategories(count = 2): Promise<ContentCategory[]> {
     picks.push(cat);
   }
   while (picks.length < count) {
-    // Fallback: fill with anything not yet picked
     const remaining = CONTENT_CATEGORIES.filter((c) => !picks.includes(c));
     if (!remaining.length) break;
     picks.push(remaining[Math.floor(Math.random() * remaining.length)]);
   }
+
+  // Mix-coverage rule: when winners exist and we're picking >1, never let
+  // the entire run be winners — swap the last pick for the best non-winner.
+  if (winners.size > 0 && count > 1 && picks.every((p) => winners.has(p))) {
+    const replacement = sorted.find(
+      (c) => !winners.has(c) && !picks.includes(c)
+    );
+    if (replacement) picks[picks.length - 1] = replacement;
+  }
+
   return picks;
 }
 

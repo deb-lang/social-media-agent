@@ -1,9 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import useSWR from "swr";
 import { toast } from "sonner";
 import SchedulerModal from "./SchedulerModal";
 import type { PostListRow } from "@/lib/posts-helpers";
+
+interface RecommendRow {
+  category: string;
+  confidence: "high" | "low" | "insufficient";
+  rank: number | null;
+  reasoning: string;
+}
+interface RecommendResp {
+  rankings: RecommendRow[];
+  eligible_count: number;
+}
+const recFetcher = (url: string) => fetch(url).then((r) => r.json());
 
 const CATEGORIES = [
   { value: "lead_magnet", label: "Lead magnet" },
@@ -34,6 +47,12 @@ export default function ManualPostForm() {
   const [regenMode, setRegenMode] = useState(false);
   const [regenFeedback, setRegenFeedback] = useState("");
   const [justRegenerated, setJustRegenerated] = useState(false);
+
+  // Performance recommender — surface up to 3 high-confidence categories.
+  const { data: rec } = useSWR<RecommendResp>("/api/analytics/recommend", recFetcher);
+  const recommendedTop3 = (rec?.rankings ?? [])
+    .filter((r) => r.confidence === "high" && r.rank != null && r.rank <= 3)
+    .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
 
   const charCount = context.length;
   const charValid = charCount >= 50 && charCount <= 2500;
@@ -518,6 +537,40 @@ export default function ManualPostForm() {
           </button>
         )}
       </div>
+
+      {/* Recommender hint — top categories by recent performance */}
+      {recommendedTop3.length > 0 && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, background: "var(--success-bg)", border: "1px solid #BCE7CB" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, letterSpacing: ".06em", color: "var(--text-dim)", textTransform: "uppercase", marginBottom: 6 }}>
+            Trending · last 90 days
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {recommendedTop3.map((r) => {
+              const label = CATEGORIES.find((c) => c.value === r.category)?.label ?? r.category;
+              const active = category === r.category;
+              return (
+                <button
+                  key={r.category}
+                  type="button"
+                  onClick={() => setCategory(r.category as CategoryValue)}
+                  disabled={submitting}
+                  className="chip"
+                  title={r.reasoning}
+                  style={{
+                    background: active ? "var(--navy)" : "var(--surface)",
+                    color: active ? "#fff" : "var(--navy)",
+                    border: "1px solid var(--border)",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  #{r.rank} · {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Category + Format */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, marginBottom: 22 }}>

@@ -2,6 +2,24 @@
 
 import useSWR from "swr";
 
+interface RecommendationRow {
+  category: string;
+  sample_size: number;
+  total_impressions: number;
+  weighted_engagement_rate: number | null;
+  confidence: "high" | "low" | "insufficient";
+  rank: number | null;
+  reasoning: string;
+}
+
+interface RecommendResp {
+  rankings: RecommendationRow[];
+  eligible_count: number;
+  total_count: number;
+  generated_at: string;
+  window_days: number;
+}
+
 interface SummaryResp {
   summary: {
     month: string;
@@ -88,6 +106,11 @@ export default function AnalyticsPage() {
     "/api/analytics/summary",
     fetcher,
     { refreshInterval: 60_000 }
+  );
+  const { data: rec } = useSWR<RecommendResp>(
+    "/api/analytics/recommend",
+    fetcher,
+    { refreshInterval: 300_000 }
   );
 
   const trend = data?.trend ?? [];
@@ -201,6 +224,97 @@ export default function AnalyticsPage() {
                 </svg>
               </div>
             </div>
+          </div>
+
+          {/* What to generate next — performance recommender */}
+          <div className="card" style={{ marginTop: 22 }}>
+            <div className="card-head">
+              <h3 className="card-title">
+                <span className="ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </span>
+                What to generate next
+              </h3>
+              <span className="card-meta">
+                Last 90 days · {rec?.eligible_count ?? 0} of 5 categories eligible
+              </span>
+            </div>
+            {!rec ? (
+              <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading recommendations…</p>
+            ) : rec.eligible_count === 0 ? (
+              <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.6 }}>
+                <p style={{ margin: 0 }}>
+                  Need 5+ published posts and 50+ impressions per category before recommendations are reliable.
+                </p>
+                <p style={{ margin: "6px 0 0", color: "var(--text-dim)", fontSize: 12 }}>
+                  {rec.total_count} published posts in window · waiting for more data.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {rec.rankings
+                  .slice()
+                  .sort((a, b) => {
+                    // High confidence + ranked first; insufficient last
+                    if (a.confidence === "insufficient" && b.confidence !== "insufficient") return 1;
+                    if (b.confidence === "insufficient" && a.confidence !== "insufficient") return -1;
+                    return (a.rank ?? 99) - (b.rank ?? 99);
+                  })
+                  .map((row) => {
+                    const tone =
+                      row.confidence === "high"
+                        ? "ok"
+                        : row.confidence === "low"
+                          ? "warn"
+                          : "neu";
+                    const isWinner = row.confidence === "high" && (row.rank ?? 99) <= 3;
+                    return (
+                      <div
+                        key={row.category}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "auto 1fr auto",
+                          gap: 14,
+                          alignItems: "center",
+                          padding: "10px 14px",
+                          borderRadius: 10,
+                          background: isWinner ? "var(--success-bg)" : "var(--surface-hover)",
+                          border: isWinner ? "1px solid #BCE7CB" : "1px solid var(--border)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontFamily: "var(--font-mono)",
+                            fontSize: 11,
+                            letterSpacing: ".06em",
+                            color: "var(--text-dim)",
+                            minWidth: 24,
+                            textAlign: "center",
+                          }}
+                        >
+                          {row.rank ? `#${row.rank}` : "—"}
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: "var(--navy)" }}>
+                            {CATEGORY_LABEL[row.category] ?? row.category}
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                            {row.reasoning}
+                          </div>
+                        </div>
+                        <span
+                          className={`status ${tone}`}
+                          style={{ padding: "3px 8px", textTransform: "uppercase", letterSpacing: ".04em", fontSize: 10.5 }}
+                        >
+                          {row.confidence === "insufficient" ? "Need more data" : row.confidence}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
 
           {/* Leaderboard + Mix */}
