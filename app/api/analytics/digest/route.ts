@@ -25,6 +25,88 @@ export async function POST(req: NextRequest) {
   const authResult = authorizeCron(req);
   if (authResult) return authResult;
 
+  // ?placeholder=1 — fires a Slack digest with hardcoded sample data so we
+  // can preview the message format before any real posts have published.
+  // Bypasses Supabase entirely. Used for one-off demo/sanity testing.
+  const placeholder =
+    req.nextUrl.searchParams.get("placeholder") === "1" ||
+    req.nextUrl.searchParams.get("demo") === "1";
+  if (placeholder) {
+    const samplePosts: DigestPost[] = [
+      {
+        id: "00000000-0000-0000-0000-000000000001",
+        caption: "1 in 4 new prescriptions get abandoned within 48 hours of diagnosis. (placeholder)",
+        category: "stat_post",
+        format: "image",
+        impressions: 1240,
+        engagement_rate: 4.2,
+        link_clicks: 18,
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000002",
+        caption: "Why most patient support programs lose patients in week one. (placeholder)",
+        category: "thought_leadership",
+        format: "carousel",
+        impressions: 980,
+        engagement_rate: 3.8,
+        link_clicks: 12,
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000003",
+        caption: "Mentor connection rate hits 73% — vs. 10-20% for hub-only support. (placeholder)",
+        category: "missing_middle",
+        format: "image",
+        impressions: 750,
+        engagement_rate: 3.1,
+        link_clicks: 9,
+      },
+    ];
+    const sampleRecommendations: DigestRecommendation[] = [
+      {
+        category: "stat_post",
+        rank: 1,
+        confidence: "high",
+        reasoning: "12 posts · 14,200 impressions · 4.1% avg engagement · winning (placeholder)",
+      },
+      {
+        category: "thought_leadership",
+        rank: 2,
+        confidence: "high",
+        reasoning: "10 posts · 9,800 impressions · 3.6% avg engagement · winning (placeholder)",
+      },
+      {
+        category: "missing_middle",
+        rank: 3,
+        confidence: "low",
+        reasoning: "6 posts · 4,500 impressions · 2.9% avg engagement · low confidence (placeholder)",
+      },
+      {
+        category: "lead_magnet",
+        rank: null,
+        confidence: "insufficient",
+        reasoning: "2 posts · 600 impressions · need 3 more posts before this is reliable (placeholder)",
+      },
+      {
+        category: "perfectpatient",
+        rank: null,
+        confidence: "insufficient",
+        reasoning: "0 published posts in last 90d (placeholder)",
+      },
+    ];
+    await notifyWeeklyDigest({
+      topPosts: samplePosts,
+      recommendations: sampleRecommendations,
+      windowDays: WEEK_DAYS,
+      totalPublished: 28,
+    });
+    return NextResponse.json({
+      ok: true,
+      sent: true,
+      placeholder: true,
+      note: "Sample digest fired with hardcoded placeholder data. No DB queries.",
+    });
+  }
+
   const sb = supabaseAdmin();
   const weekAgo = new Date(Date.now() - WEEK_DAYS * 86_400_000).toISOString();
   const ninetyDaysAgo = new Date(Date.now() - RECOMMENDER_WINDOW_DAYS * 86_400_000).toISOString();
