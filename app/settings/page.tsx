@@ -323,6 +323,14 @@ export default function SettingsPage() {
           >
             {running === "Recycle scan" ? "Running…" : "Scan for recyclables"}
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => runManual("Weekly digest", "/api/analytics/digest")}
+            disabled={running === "Weekly digest"}
+          >
+            {running === "Weekly digest" ? "Running…" : "Send weekly digest"}
+          </button>
         </div>
         <p
           style={{

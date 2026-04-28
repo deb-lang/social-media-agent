@@ -3,6 +3,7 @@
   "crons": [
     { "path": "/api/generate", "schedule": "0 16 1,15 * *" },
     { "path": "/api/analytics/sync", "schedule": "0 18 * * 1-5" },
+    { "path": "/api/analytics/digest", "schedule": "0 18 * * 1" },
     { "path": "/api/recycle/scan", "schedule": "0 16 20 * *" }
   ]
 }
