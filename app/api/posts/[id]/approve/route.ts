@@ -47,7 +47,9 @@ export async function POST(
     return NextResponse.json({ error: "post not found" }, { status: 404 });
   }
 
-  if (!["pending_review", "rejected"].includes(post.status)) {
+  // Allow re-approving a failed post (retry flow). Reviewer hits Retry on
+  // /queue → same approve route runs end-to-end with a fresh scheduled_for.
+  if (!["pending_review", "rejected", "failed"].includes(post.status)) {
     return NextResponse.json(
       { error: `cannot approve post with status=${post.status}` },
       { status: 409 }

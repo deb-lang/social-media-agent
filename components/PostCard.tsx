@@ -35,7 +35,7 @@ export default function PostCard({
   onChange?: () => void;
 }) {
   const [slideIdx, setSlideIdx] = useState(0);
-  const [pending, setPending] = useState<null | "approve" | "reject" | "delete">(null);
+  const [pending, setPending] = useState<null | "approve" | "reject" | "delete" | "retry">(null);
   const [mode, setMode] = useState<"idle" | "rejecting">("idle");
   const [feedback, setFeedback] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -82,6 +82,26 @@ export default function PostCard({
       onChange?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  // Retry a failed publish — same Publer flow, fresh scheduled_for slot.
+  async function retry() {
+    setPending("retry");
+    try {
+      const res = await fetch(`/api/posts/${post.id}/approve`, { method: "POST" });
+      const payload = await res.json();
+      if (!res.ok || !payload.ok) throw new Error(payload.error ?? "Retry failed");
+      toast.success("Retry succeeded", {
+        description: payload.scheduled_for
+          ? `Scheduled for ${formatSlot(payload.scheduled_for)}`
+          : "",
+      });
+      onChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Retry failed");
     } finally {
       setPending(null);
     }
@@ -227,6 +247,11 @@ export default function PostCard({
           {post.rejection_count > 0 && (
             <span className="chip warn">Regen ×{post.rejection_count}</span>
           )}
+          {post.status === "failed" && (
+            <span className="chip" style={{ background: "#FDECEC", color: "#7A2A24", fontWeight: 600 }}>
+              Failed · retry available
+            </span>
+          )}
         </div>
 
         {post.caption.split("\n").map((line, i) => {
@@ -319,7 +344,80 @@ export default function PostCard({
 
       {/* Actions */}
       <div className="actions">
-        {mode === "rejecting" ? (
+        {post.status === "failed" ? (
+          // Failed publish — surface retry + delete. The original Publer
+          // error landed in Slack + the post's audit_log; we don't render
+          // it inline here, but reviewer can click into the post detail.
+          <>
+            <div
+              style={{
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: "var(--warning-bg, #FDECEC)",
+                border: "1px solid #F5C8C8",
+                fontSize: 12.5,
+                color: "#7A2A24",
+                lineHeight: 1.5,
+                width: "100%",
+              }}
+            >
+              <strong>Publish failed.</strong> Check Slack <code style={{ fontSize: 11 }}>#social-media-agent</code> for the Publer error. Click Retry to re-attempt with a fresh schedule slot.
+            </div>
+            <button
+              type="button"
+              className="btn act-approve"
+              onClick={retry}
+              disabled={pending !== null}
+              title="Retry publishing this post via Publer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              {pending === "retry" ? "Retrying…" : "Retry"}
+            </button>
+            <button
+              type="button"
+              onClick={deletePost}
+              disabled={pending !== null}
+              title="Delete post"
+              aria-label="Delete post"
+              style={{
+                alignSelf: "center",
+                background: "transparent",
+                border: "1px solid transparent",
+                color: "var(--text-dim)",
+                padding: 6,
+                borderRadius: 8,
+                cursor: pending !== null ? "not-allowed" : "pointer",
+                opacity: pending === "delete" ? 0.5 : 1,
+                transition: "color 150ms, border-color 150ms, background 150ms",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 4,
+              }}
+              onMouseEnter={(e) => {
+                if (pending !== null) return;
+                e.currentTarget.style.color = "#B54A44";
+                e.currentTarget.style.borderColor = "#F5C8C8";
+                e.currentTarget.style.background = "#FDECEC";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-dim)";
+                e.currentTarget.style.borderColor = "transparent";
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          </>
+        ) : mode === "rejecting" ? (
           <>
             <textarea
               autoFocus
