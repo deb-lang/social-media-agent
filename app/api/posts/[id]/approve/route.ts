@@ -18,6 +18,7 @@ import {
   scheduleImagePost,
   scheduleCarouselPost,
   pollJobStatus,
+  findRecentPostIdByText,
 } from "@/lib/publer";
 
 export const maxDuration = 120;
@@ -181,13 +182,32 @@ export async function POST(
     // Persist job id immediately so we can recover if the poll fails
     await sb.from("posts").update({ publer_job_id: jobId }).eq("id", id);
 
-    // Poll job
+    // Poll job. New Publer API doesn't return post_id in job_status — only
+    // overall status + per-account failures map. Look up the published post
+    // via /posts list and match by text after the job completes.
     const job = await pollJobStatus(jobId);
     if (job.status === "failed") {
-      throw new Error(job.error ?? "Publer job failed without message");
+      throw new Error("Publer job status=failed (no message returned)");
+    }
+    const failures = job.payload?.failures ?? {};
+    if (Object.keys(failures).length > 0) {
+      throw new Error(
+        `Publer job completed with per-account failures: ${JSON.stringify(failures).slice(0, 300)}`
+      );
     }
 
-    const publerPostId = job.result?.post_id ?? null;
+    // Resolve publer_post_id by matching the just-scheduled post in Publer's
+    // recent posts list. Non-fatal — if we can't find it the row is still
+    // status=scheduled; analytics sync will reconcile when post publishes.
+    let publerPostId: string | null = null;
+    try {
+      publerPostId = await findRecentPostIdByText(
+        linkedInAccountId,
+        captionWithHashtags
+      );
+    } catch (err) {
+      console.warn(`[approve] post id lookup failed (non-fatal):`, err);
+    }
 
     await sb
       .from("posts")

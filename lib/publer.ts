@@ -1,10 +1,22 @@
 // Publer API client.
-// Gotchas:
+//
+// IMPORTANT: Publer's schedule endpoint contract changed (verified 2026-04-30
+// via support ticket). All schedule calls now wrap in `bulk: { state, posts }`
+// with target accounts moved into `accounts[]`. The old top-level
+// `social_account_ids/text/scheduled_at` shape returns 500 silently.
+//
+// Other gotchas:
 // - Auth header is "Bearer-API" not "Bearer" (Publer-specific).
-// - Scheduling endpoints return 202 + job_id; MUST poll /job_status/{id}.
-// - LinkedIn carousels = PDF document posts, not image carousels. Requires
-//   networks.linkedin.{type: "photo", details.type: "document", title: <str>}.
+// - Schedule returns 202 + job_id; poll /job_status/{id} until status=="complete"
+//   (success when payload.failures is empty) or status=="failed".
+// - LinkedIn carousels = PDF document posts. Use type="photo" with
+//   details.type="document", title, and media[].type="document".
+// - LinkedIn image posts use type="photo" with media[].type="photo".
+// - The job_status response no longer carries the published post_id; pull it
+//   via GET /posts?state=scheduled and match by text.
 // - Rate limit: 100 req / 2-min rolling window. Watch X-RateLimit-Remaining.
+// - DELETE /posts with body filter is all-or-nothing for the workspace's
+//   scheduled posts. Don't use it to retract a single post — use the UI.
 
 const BASE_URL = "https://app.publer.com/api/v1";
 
@@ -53,14 +65,11 @@ export class PublerError extends Error {
 }
 
 // ─── Social accounts ──────────────────────────────────────
-// Publer's endpoint is /accounts (not /social_accounts despite some docs).
-// Response uses "provider" (not "network") and "type" discriminates the flavor
-// (e.g. LinkedIn company page = type "in_page").
 export interface SocialAccount {
   id: string;
-  provider: string; // "linkedin" | "instagram" | "facebook" | "twitter" | "x" | ...
+  provider: string;
   name: string;
-  type: string; // "in_page" (LinkedIn company) | "ig_business" | etc.
+  type: string;
   social_id?: string;
   picture?: string;
 }
@@ -74,13 +83,21 @@ export async function listSocialAccounts(): Promise<SocialAccount[]> {
 export interface MediaUploadResponse {
   id: string;
   url?: string;
+  path?: string;
+  thumbnail?: string;
 }
 
+/**
+ * Upload media (image or PDF document) by giving Publer a public URL.
+ * For LinkedIn:
+ *   - type:"image" → returned id is used as media[{id, type:"photo"}] in schedule
+ *   - type:"document" → returned id is used as media[{id, type:"document"}] in schedule
+ *     (combined with details.type="document" + title at the linkedin level)
+ */
 export async function uploadMedia(opts: {
   url: string;
   type: "image" | "document";
 }): Promise<MediaUploadResponse> {
-  // Publer accepts public URLs for media upload (simpler than multipart).
   const { data } = await request<MediaUploadResponse>("/media", {
     method: "POST",
     body: JSON.stringify({ url: opts.url, type: opts.type }),
@@ -88,7 +105,7 @@ export async function uploadMedia(opts: {
   return data;
 }
 
-// ─── Schedule post ────────────────────────────────────────
+// ─── Schedule post (bulk format) ──────────────────────────
 export interface ScheduleImagePostInput {
   socialAccountIds: string[];
   text: string;
@@ -108,17 +125,35 @@ export interface ScheduleResponse {
   job_id: string;
 }
 
+/** Build the `accounts[]` array shared by both image + carousel schedules. */
+function accountsArray(
+  socialAccountIds: string[],
+  scheduledAt: string
+): Array<{ id: string; scheduled_at: string }> {
+  return socialAccountIds.map((id) => ({ id, scheduled_at: scheduledAt }));
+}
+
 export async function scheduleImagePost(
   input: ScheduleImagePostInput
 ): Promise<ScheduleResponse> {
   const { data } = await request<ScheduleResponse>("/posts/schedule", {
     method: "POST",
     body: JSON.stringify({
-      social_account_ids: input.socialAccountIds,
-      text: input.text,
-      media_ids: [input.mediaId],
-      scheduled_at: input.scheduledAt,
-      state: "scheduled",
+      bulk: {
+        state: "scheduled",
+        posts: [
+          {
+            networks: {
+              linkedin: {
+                type: "photo",
+                text: input.text,
+                media: [{ id: input.mediaId, type: "photo" }],
+              },
+            },
+            accounts: accountsArray(input.socialAccountIds, input.scheduledAt),
+          },
+        ],
+      },
     }),
   });
   return data;
@@ -127,51 +162,83 @@ export async function scheduleImagePost(
 export async function scheduleCarouselPost(
   input: ScheduleCarouselPostInput
 ): Promise<ScheduleResponse> {
-  // LinkedIn document posts require the nested networks.linkedin structure
-  // with type=photo, details.type=document, and a title (required).
+  // LinkedIn document/PDF carousel: details.type="document" + title is required.
   const { data } = await request<ScheduleResponse>("/posts/schedule", {
     method: "POST",
     body: JSON.stringify({
-      social_account_ids: input.socialAccountIds,
-      text: input.text,
-      networks: {
-        linkedin: {
-          type: "photo",
-          details: { type: "document" },
-          title: input.carouselTitle,
-          media: [input.mediaId],
-        },
+      bulk: {
+        state: "scheduled",
+        posts: [
+          {
+            networks: {
+              linkedin: {
+                type: "photo",
+                text: input.text,
+                media: [{ id: input.mediaId, type: "document" }],
+                details: { type: "document" },
+                title: input.carouselTitle,
+              },
+            },
+            accounts: accountsArray(input.socialAccountIds, input.scheduledAt),
+          },
+        ],
       },
-      scheduled_at: input.scheduledAt,
-      state: "scheduled",
     }),
   });
   return data;
 }
 
 // ─── Poll job status ──────────────────────────────────────
+// New shape: { status: "complete"|"pending"|"failed", payload?: { failures: {...} } }
+// Success = status === "complete" AND no failures. Per-account failures live in
+// payload.failures keyed by account_id.
 export interface JobStatus {
-  id: string;
-  status: "pending" | "completed" | "failed";
-  result?: { post_id?: string };
-  error?: string;
+  status: "pending" | "complete" | "completed" | "failed";
+  payload?: {
+    failures?: Record<string, unknown>;
+  };
 }
 
 export async function pollJobStatus(
   jobId: string,
   opts: { maxAttempts?: number; baseDelayMs?: number } = {}
 ): Promise<JobStatus> {
-  const maxAttempts = opts.maxAttempts ?? 10;
+  const maxAttempts = opts.maxAttempts ?? 12;
   const baseDelayMs = opts.baseDelayMs ?? 1000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const { data } = await request<JobStatus>(`/job_status/${jobId}`);
-    if (data.status === "completed" || data.status === "failed") return data;
-    // Exponential backoff capped at 8s
+    if (
+      data.status === "complete" ||
+      data.status === "completed" ||
+      data.status === "failed"
+    ) {
+      return data;
+    }
     const delay = Math.min(baseDelayMs * 2 ** attempt, 8000);
     await new Promise((r) => setTimeout(r, delay));
   }
   throw new PublerError(`Job ${jobId} did not resolve within ${maxAttempts} polls`, 408);
+}
+
+/**
+ * Resolve a Publer post_id by matching the text snippet — the new schedule API
+ * doesn't return the post_id directly, so we look up recent scheduled posts
+ * and match by exact text. Returns null if no match (caller should treat as
+ * "scheduled but post_id unknown" and proceed; analytics sync will reconcile).
+ */
+export async function findRecentPostIdByText(
+  accountId: string,
+  text: string,
+  state: "scheduled" | "published" = "scheduled"
+): Promise<string | null> {
+  const { data } = await request<{
+    posts: Array<{ id: string; text: string; account_id: string; state: string }>;
+  }>(`/posts?state=${state}&limit=20`);
+  const match = (data.posts ?? []).find(
+    (p) => p.account_id === accountId && p.text.trim() === text.trim()
+  );
+  return match?.id ?? null;
 }
 
 // ─── Post insights (analytics) ────────────────────────────
