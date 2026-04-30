@@ -14,11 +14,12 @@ import { logAction } from "@/lib/audit";
 import { notifyApproved, notifyFailure, notifyPublishFailed } from "@/lib/slack";
 import {
   PublerError,
-  uploadMedia,
+  uploadMediaAndWait,
   scheduleImagePost,
   scheduleCarouselPost,
   pollJobStatus,
   findRecentPostIdByText,
+  type MediaRef,
 } from "@/lib/publer";
 
 export const maxDuration = 120;
@@ -134,7 +135,9 @@ export async function POST(
       throw new Error("Missing PUBLER_LINKEDIN_ACCOUNT_ID");
     }
 
-    // Upload the right media asset
+    // Upload the right media asset. New flow: POST /media/from-url is async,
+    // returns a job_id, then poll /job_status/{id} for the descriptors.
+    // PDFs auto-decompose into N per-page PNGs (one descriptor each).
     const isCarousel = post.format === "carousel";
     const mediaUrl = isCarousel ? post.carousel_pdf_url : post.image_url;
     if (!mediaUrl) {
@@ -142,10 +145,17 @@ export async function POST(
         `Missing ${isCarousel ? "carousel_pdf_url" : "image_url"} on post ${id}`
       );
     }
-    const mediaResp = await uploadMedia({
-      url: mediaUrl,
-      type: isCarousel ? "document" : "image",
+    const descriptors = await uploadMediaAndWait({
+      url: mediaUrl as string,
+      name: `${post.category}-${post.format}-${id.slice(0, 8)}`,
     });
+    if (descriptors.length === 0) {
+      throw new Error(`Publer media upload returned 0 descriptors`);
+    }
+    const mediaItems: MediaRef[] = descriptors.map((d) => ({
+      id: d.id,
+      type: (d.type as MediaRef["type"]) ?? "photo",
+    }));
 
     // Assemble caption + hashtags. Hashtags are stored separately; append at end.
     const captionWithHashtags = [
@@ -164,7 +174,7 @@ export async function POST(
       const resp = await scheduleCarouselPost({
         socialAccountIds: [linkedInAccountId],
         text: captionWithHashtags,
-        mediaId: mediaResp.id,
+        mediaItems,
         scheduledAt: scheduled_for ?? now,
         carouselTitle,
       });
@@ -173,7 +183,7 @@ export async function POST(
       const resp = await scheduleImagePost({
         socialAccountIds: [linkedInAccountId],
         text: captionWithHashtags,
-        mediaId: mediaResp.id,
+        mediaItems,
         scheduledAt: scheduled_for ?? now,
       });
       jobId = resp.job_id;

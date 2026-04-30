@@ -1,22 +1,26 @@
 // Publer API client.
 //
-// IMPORTANT: Publer's schedule endpoint contract changed (verified 2026-04-30
-// via support ticket). All schedule calls now wrap in `bulk: { state, posts }`
-// with target accounts moved into `accounts[]`. The old top-level
-// `social_account_ids/text/scheduled_at` shape returns 500 silently.
+// Verified contract on 2026-04-30 via support ticket + doc reading:
+//
+// MEDIA UPLOAD: the old `POST /media` JSON `{url, type}` endpoint is deprecated.
+// Two current options:
+//   1. POST /media — multipart/form-data with `file` (direct file upload)
+//   2. POST /media/from-url — JSON {media:[{url, name}], type:"single", ...}
+//      Returns {job_id} — the actual media descriptors come from polling
+//      /job_status/{job_id}; payload is an array. PDFs auto-decompose into
+//      per-page PNGs (each becomes a "photo" media item).
+//
+// SCHEDULE: wraps in `bulk: { state, posts }`. Media is referenced inline as
+// `media: [{id, type:"photo"}]` in `networks.linkedin`. PDF carousels add
+// `details: {type: "document"}` + `title` at the linkedin level.
+//
+// JOB STATUS: `{status, payload}` where payload is failures-keyed-by-account
+// for schedule jobs, and an array of media descriptors for media jobs.
+// payload is consumed on first complete read — capture it eagerly.
 //
 // Other gotchas:
-// - Auth header is "Bearer-API" not "Bearer" (Publer-specific).
-// - Schedule returns 202 + job_id; poll /job_status/{id} until status=="complete"
-//   (success when payload.failures is empty) or status=="failed".
-// - LinkedIn carousels = PDF document posts. Use type="photo" with
-//   details.type="document", title, and media[].type="document".
-// - LinkedIn image posts use type="photo" with media[].type="photo".
-// - The job_status response no longer carries the published post_id; pull it
-//   via GET /posts?state=scheduled and match by text.
-// - Rate limit: 100 req / 2-min rolling window. Watch X-RateLimit-Remaining.
-// - DELETE /posts with body filter is all-or-nothing for the workspace's
-//   scheduled posts. Don't use it to retract a single post — use the UI.
+// - Auth header is "Bearer-API" not "Bearer".
+// - Rate limit: 100 req / 2-min rolling window.
 
 const BASE_URL = "https://app.publer.com/api/v1";
 
@@ -80,43 +84,95 @@ export async function listSocialAccounts(): Promise<SocialAccount[]> {
 }
 
 // ─── Media upload ─────────────────────────────────────────
-export interface MediaUploadResponse {
+// MediaDescriptor mirrors what /job_status returns for media jobs: each
+// uploaded asset gets one descriptor. PDFs decompose into N descriptors,
+// one per page, each marked type="photo".
+export interface MediaDescriptor {
   id: string;
-  url?: string;
   path?: string;
   thumbnail?: string;
+  type?: string; // "photo" | "video" | "document"
+  width?: number;
+  height?: number;
+  name?: string;
+  caption?: string;
+  source?: string | null;
+  validity?: Record<string, unknown>;
+}
+
+interface UploadFromUrlResponse {
+  job_id: string;
 }
 
 /**
- * Upload media (image or PDF document) by giving Publer a public URL.
- * For LinkedIn:
- *   - type:"image" → returned id is used as media[{id, type:"photo"}] in schedule
- *   - type:"document" → returned id is used as media[{id, type:"document"}] in schedule
- *     (combined with details.type="document" + title at the linkedin level)
+ * Kick off an async media upload from a public URL. Returns a job_id that
+ * must be polled via pollJobStatus to retrieve the media descriptors.
+ * Use uploadMediaAndWait() for the common one-shot path.
  */
-export async function uploadMedia(opts: {
+export async function uploadMediaFromUrl(opts: {
   url: string;
-  type: "image" | "document";
-}): Promise<MediaUploadResponse> {
-  const { data } = await request<MediaUploadResponse>("/media", {
+  name?: string;
+  caption?: string;
+  inLibrary?: boolean;
+}): Promise<UploadFromUrlResponse> {
+  const { data } = await request<UploadFromUrlResponse>("/media/from-url", {
     method: "POST",
-    body: JSON.stringify({ url: opts.url, type: opts.type }),
+    body: JSON.stringify({
+      media: [
+        {
+          url: opts.url,
+          name: opts.name ?? "post-asset",
+          caption: opts.caption,
+        },
+      ],
+      type: "single",
+      direct_upload: true,
+      in_library: opts.inLibrary ?? false,
+    }),
   });
   return data;
 }
 
+/**
+ * Upload media from URL and wait for processing to complete. Returns the
+ * array of media descriptors (1 per uploaded asset; PDFs decompose to N).
+ */
+export async function uploadMediaAndWait(opts: {
+  url: string;
+  name?: string;
+  caption?: string;
+}): Promise<MediaDescriptor[]> {
+  const { job_id } = await uploadMediaFromUrl(opts);
+  const status = await pollJobStatus<MediaDescriptor[]>(job_id, {
+    maxAttempts: 30,
+    baseDelayMs: 1000,
+  });
+  if (status.status === "failed") {
+    throw new PublerError(
+      `Media upload job ${job_id} failed: ${JSON.stringify(status.payload ?? {}).slice(0, 200)}`,
+      500
+    );
+  }
+  return Array.isArray(status.payload) ? status.payload : [];
+}
+
 // ─── Schedule post (bulk format) ──────────────────────────
+export interface MediaRef {
+  id: string;
+  type: "photo" | "video" | "document";
+}
+
 export interface ScheduleImagePostInput {
   socialAccountIds: string[];
   text: string;
-  mediaId: string;
-  scheduledAt: string; // ISO 8601 with timezone offset
+  mediaItems: MediaRef[]; // typically 1 item for image posts
+  scheduledAt: string; // ISO 8601
 }
 
 export interface ScheduleCarouselPostInput {
   socialAccountIds: string[];
   text: string;
-  mediaId: string;
+  mediaItems: MediaRef[]; // N items (one per slide, after PDF decomposition)
   scheduledAt: string;
   carouselTitle: string;
 }
@@ -125,7 +181,6 @@ export interface ScheduleResponse {
   job_id: string;
 }
 
-/** Build the `accounts[]` array shared by both image + carousel schedules. */
 function accountsArray(
   socialAccountIds: string[],
   scheduledAt: string
@@ -147,7 +202,7 @@ export async function scheduleImagePost(
               linkedin: {
                 type: "photo",
                 text: input.text,
-                media: [{ id: input.mediaId, type: "photo" }],
+                media: input.mediaItems.map((m) => ({ id: m.id, type: m.type })),
               },
             },
             accounts: accountsArray(input.socialAccountIds, input.scheduledAt),
@@ -162,7 +217,9 @@ export async function scheduleImagePost(
 export async function scheduleCarouselPost(
   input: ScheduleCarouselPostInput
 ): Promise<ScheduleResponse> {
-  // LinkedIn document/PDF carousel: details.type="document" + title is required.
+  // LinkedIn document/PDF carousel: media[].type stays "photo" (Publer
+  // recomposes), but details.type="document" + title is what tells LinkedIn
+  // to render as a PDF carousel post.
   const { data } = await request<ScheduleResponse>("/posts/schedule", {
     method: "POST",
     body: JSON.stringify({
@@ -174,7 +231,7 @@ export async function scheduleCarouselPost(
               linkedin: {
                 type: "photo",
                 text: input.text,
-                media: [{ id: input.mediaId, type: "document" }],
+                media: input.mediaItems.map((m) => ({ id: m.id, type: m.type })),
                 details: { type: "document" },
                 title: input.carouselTitle,
               },
@@ -188,26 +245,21 @@ export async function scheduleCarouselPost(
   return data;
 }
 
-// ─── Poll job status ──────────────────────────────────────
-// New shape: { status: "complete"|"pending"|"failed", payload?: { failures: {...} } }
-// Success = status === "complete" AND no failures. Per-account failures live in
-// payload.failures keyed by account_id.
-export interface JobStatus {
-  status: "pending" | "complete" | "completed" | "failed";
-  payload?: {
-    failures?: Record<string, unknown>;
-  };
+// ─── Job status (generic) ─────────────────────────────────
+export interface JobStatus<P = unknown> {
+  status: "pending" | "working" | "complete" | "completed" | "failed";
+  payload?: P;
 }
 
-export async function pollJobStatus(
+export async function pollJobStatus<P = unknown>(
   jobId: string,
   opts: { maxAttempts?: number; baseDelayMs?: number } = {}
-): Promise<JobStatus> {
-  const maxAttempts = opts.maxAttempts ?? 12;
+): Promise<JobStatus<P>> {
+  const maxAttempts = opts.maxAttempts ?? 15;
   const baseDelayMs = opts.baseDelayMs ?? 1000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const { data } = await request<JobStatus>(`/job_status/${jobId}`);
+    const { data } = await request<JobStatus<P>>(`/job_status/${jobId}`);
     if (
       data.status === "complete" ||
       data.status === "completed" ||
@@ -223,9 +275,9 @@ export async function pollJobStatus(
 
 /**
  * Resolve a Publer post_id by matching the text snippet — the new schedule API
- * doesn't return the post_id directly, so we look up recent scheduled posts
- * and match by exact text. Returns null if no match (caller should treat as
- * "scheduled but post_id unknown" and proceed; analytics sync will reconcile).
+ * doesn't return the post_id directly. Returns null if no match (caller
+ * should treat as "scheduled but post_id unknown" and proceed; analytics
+ * sync can reconcile if needed).
  */
 export async function findRecentPostIdByText(
   accountId: string,
