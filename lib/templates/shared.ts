@@ -67,12 +67,13 @@ export function footerStrap(opts: { url?: string; tone: "dark" | "light" } = { t
 // viewport produces a pixel-perfect crop with no scrollbars.
 export function htmlDoc(
   body: string,
-  opts: { width?: number; height?: number; bgColor?: string; title?: string } = {}
+  opts: { width?: number; height?: number; bgColor?: string; title?: string; fontFamily?: string } = {}
 ): string {
   const width = opts.width ?? CANVAS.width;
   const height = opts.height ?? CANVAS.height;
   const bg = opts.bgColor ?? COLORS.skyBreeze;
   const title = opts.title ?? "PatientPartner";
+  const fontFamily = opts.fontFamily ?? FONTS.body;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -87,7 +88,7 @@ export function htmlDoc(
     html, body {
       width: ${width}px;
       height: ${height}px;
-      font-family: ${FONTS.body};
+      font-family: ${fontFamily};
       background: ${bg};
       color: ${COLORS.navy};
       -webkit-font-smoothing: antialiased;

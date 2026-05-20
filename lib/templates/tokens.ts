@@ -82,14 +82,21 @@ export const SHADOWS = {
   ring: "0 0 0 1px rgba(24, 56, 87, 0.05)",
 } as const;
 
-// Standard canvas size for every template (Claude Design bundle uses 1080×1080
-// for both static posts and carousel slides).
+// Standard canvas size for static templates and the original v1 carousel.
 export const CANVAS = {
   width: 1080,
   height: 1080,
 } as const;
 
-// Google Fonts URL for Poppins (loaded in template <head>; the renderer
-// awaits document.fonts.ready before screenshot).
+// Tall canvas for the v2 carousel sequences (A, D) — 1080×1350 is the 4:5
+// vertical ratio LinkedIn surfaces taller in-feed than 1:1.
+export const CANVAS_TALL = {
+  width: 1080,
+  height: 1350,
+} as const;
+
+// Google Fonts URL — loads Poppins (v1 templates) AND Manrope (v2 templates).
+// Renderer awaits document.fonts.ready before screenshot so font swap can't
+// land mid-render.
 export const GOOGLE_FONTS_HREF =
-  "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap";
+  "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap";
