@@ -294,23 +294,106 @@ export async function findRecentPostIdByText(
 }
 
 // ─── Post insights (analytics) ────────────────────────────
-export interface PostInsights {
-  post_id: string;
-  impressions?: number;
-  engagement_rate?: number;
-  likes?: number;
-  comments?: number;
-  shares?: number;
-  link_clicks?: number;
-  follower_delta?: number;
+//
+// CONTRACT CHANGED 2026-05 (verified via docs at
+// publer.com/docs/analytics/post-insights):
+//   - Old single-post endpoint /analytics/{accountId}/post_insights?post_id=X
+//     returns 500 for every input shape. Probably retired.
+//   - New endpoint is the SAME URL but returns a paginated LIST of all posts
+//     in a date range, each carrying an `analytics` dict. Required query
+//     params are `from` and `to` (YYYY-MM-DD).
+//
+// Field mapping → our DB:
+//   analytics.reach.value         → posts.impressions
+//   analytics.engagement_rate.value → posts.engagement_rate
+//   analytics.likes.value         → posts.likes
+//   analytics.comments.value      → posts.comments
+//   analytics.shares.value        → posts.shares
+//   analytics.post_clicks.value   → posts.link_clicks (closest semantic match)
+//   (no follower_delta in the new response — column stays null)
+
+export interface MetricCell {
+  name?: string;
+  value: number | null;
+  tooltip?: { text?: string };
 }
 
-export async function getPostInsights(
-  accountId: string,
-  postId: string
-): Promise<PostInsights> {
-  const { data } = await request<PostInsights>(
-    `/analytics/${accountId}/post_insights?post_id=${encodeURIComponent(postId)}`
+export interface PublerAnalyticsPost {
+  id: string;             // current Publer numeric/string id
+  old_id: string | null;  // the scheduled-state id we stored as publer_post_id
+  post_id: string | null; // network URN (e.g. "urn:li:ugcPost:7458199068901539840")
+  post_link: string | null;
+  state: string;
+  scheduled_at: string;
+  text: string;
+  title: string | null;
+  account_id: string;
+  type: string;
+  analytics?: {
+    reach?: MetricCell;
+    reach_rate?: MetricCell;
+    video_views?: MetricCell;
+    likes?: MetricCell;
+    comments?: MetricCell;
+    shares?: MetricCell;
+    post_clicks?: MetricCell;
+    engagement_rate?: MetricCell;
+  };
+}
+
+export interface PostInsightsPage {
+  posts: PublerAnalyticsPost[];
+  total: number;
+}
+
+/**
+ * Get one page of post insights (10 posts/page). Returns up to 10 published
+ * posts in the requested date range, each carrying an analytics dict.
+ */
+export async function listPostInsights(opts: {
+  accountId: string;
+  from: string;     // YYYY-MM-DD
+  to: string;       // YYYY-MM-DD
+  page?: number;    // 0-based
+  sortBy?: "scheduled_at" | "reach" | "engagement_rate" | "post_clicks" | "likes";
+  sortType?: "ASC" | "DESC";
+}): Promise<PostInsightsPage> {
+  const params = new URLSearchParams({
+    from: opts.from,
+    to: opts.to,
+    page: String(opts.page ?? 0),
+  });
+  if (opts.sortBy) params.set("sort_by", opts.sortBy);
+  if (opts.sortType) params.set("sort_type", opts.sortType);
+  const { data } = await request<PostInsightsPage>(
+    `/analytics/${opts.accountId}/post_insights?${params.toString()}`
   );
   return data;
+}
+
+/**
+ * Walk all pages and collect every published post in the date range. The
+ * sync route uses this rather than poking by-post-id (which the API no
+ * longer supports).
+ */
+export async function listAllPostInsights(opts: {
+  accountId: string;
+  from: string;
+  to: string;
+  maxPages?: number;
+}): Promise<PublerAnalyticsPost[]> {
+  const maxPages = opts.maxPages ?? 20;
+  const all: PublerAnalyticsPost[] = [];
+  for (let page = 0; page < maxPages; page++) {
+    const { posts } = await listPostInsights({
+      accountId: opts.accountId,
+      from: opts.from,
+      to: opts.to,
+      page,
+    });
+    if (posts.length === 0) break;
+    all.push(...posts);
+    if (posts.length < 10) break; // last page
+  }
+  return all;
 }
