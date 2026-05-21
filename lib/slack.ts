@@ -44,13 +44,24 @@ export async function notifyReadyForReview(opts: {
   const { postCount, runId, categories } = opts;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const queueUrl = `${appUrl}/queue`;
+  // Optional Slack user(s) to @mention so they get a notification.
+  // Accepts a comma-separated list of Slack member IDs (e.g. "U03040WK8LD,UUF1JCYTV").
+  // When unset, no one is tagged — the message just lands in the channel.
+  const notifyUserIds = (process.env.SLACK_NOTIFY_USER_ID ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const mentionPrefix = notifyUserIds.length
+    ? notifyUserIds.map((id) => `<@${id}>`).join(" ") + " "
+    : "";
+
   const text = `${postCount} posts ready for review`;
   const blocks: SlackBlock[] = [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*${postCount} LinkedIn posts ready for review*\nCategories: ${categories.join(", ")}\nRun ID: \`${runId.slice(0, 8)}\``,
+        text: `${mentionPrefix}*${postCount} LinkedIn posts ready for review*\nCategories: ${categories.join(", ")}\nRun ID: \`${runId.slice(0, 8)}\``,
       },
     },
     {
