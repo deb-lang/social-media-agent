@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
+import { toast } from "sonner";
 
 interface RecommendationRow {
   category: string;
@@ -112,6 +114,39 @@ export default function AnalyticsPage() {
     fetcher,
     { refreshInterval: 300_000 }
   );
+
+  // ─── Suggest-from-winners state ────────────────────────
+  const [suggesting, setSuggesting] = useState(false);
+  async function suggestFromWinners() {
+    setSuggesting(true);
+    try {
+      const res = await fetch("/api/analytics/suggest-from-winners", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const payload = await res.json();
+      if (res.status === 429) {
+        toast.warning(payload?.message ?? "Cooldown active — try again soon.");
+        return;
+      }
+      if (!res.ok || !payload.ok) {
+        const reason = payload?.reason === "no_winners"
+          ? payload?.message ?? "No winners eligible yet."
+          : payload?.error ?? "Something went wrong";
+        toast.error(reason);
+        return;
+      }
+      const count = (payload.winners ?? []).length;
+      toast.success(`Generating ${count} winner-inspired post${count === 1 ? "" : "s"}…`, {
+        description: "Drafts will appear in /queue in 30–90s.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start generation");
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   const trend = data?.trend ?? [];
   const categories = data?.by_category ?? [];
@@ -316,6 +351,86 @@ export default function AnalyticsPage() {
               </div>
             )}
           </div>
+
+          {/* Suggested posts from winners */}
+          {(() => {
+            const eligible = rec?.eligible_count ?? 0;
+            const hasAnyHigh = (rec?.rankings ?? []).some((r) => r.confidence === "high");
+            // Mirror the recommender's gates: only enable the button when at
+            // least one category clears N>=5 + 50+ impressions (which translates
+            // to confidence: "high" in the recommender data).
+            const canSuggest = eligible > 0 && hasAnyHigh;
+            return (
+              <div className="card" style={{ marginTop: 22 }}>
+                <div className="card-head">
+                  <h3 className="card-title">
+                    <span className="ic">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                      </svg>
+                    </span>
+                    Suggested posts from winners
+                  </h3>
+                  <span className="card-meta">Auto-generate drafts from top performers</span>
+                </div>
+                {!canSuggest ? (
+                  <div style={{ fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.6 }}>
+                    <p style={{ margin: 0 }}>
+                      Need 5+ published posts AND 50+ impressions per category before we can pick winners.
+                    </p>
+                    <p style={{ margin: "6px 0 0", color: "var(--text-dim)", fontSize: 12 }}>
+                      Suggestions unlock the moment at least one category clears the bar.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 13.5, color: "var(--text-muted)", margin: "0 0 14px", lineHeight: 1.55 }}>
+                      Take your top performers as seeds — Claude writes new drafts in the same opener style and stat-led structure, on different angles. Up to 3 drafts per click. 30-minute cooldown between clicks.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      onClick={suggestFromWinners}
+                      disabled={suggesting}
+                      style={{
+                        padding: "11px 18px",
+                        fontSize: 14,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {suggesting ? (
+                        <>
+                          <span
+                            className="spinner"
+                            style={{
+                              display: "inline-block",
+                              width: 12,
+                              height: 12,
+                              border: "2px solid #fff",
+                              borderTopColor: "transparent",
+                              borderRadius: "50%",
+                              animation: "spin 0.8s linear infinite",
+                              marginRight: 8,
+                              verticalAlign: -1,
+                            }}
+                          />
+                          Starting…
+                        </>
+                      ) : (
+                        <>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14, verticalAlign: -2, marginRight: 6 }}>
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                          </svg>
+                          Generate inspired drafts
+                        </>
+                      )}
+                    </button>
+                    <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Leaderboard + Mix */}
           <div className="ag">

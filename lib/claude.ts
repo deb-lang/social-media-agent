@@ -297,6 +297,13 @@ export interface GenerationContext {
   manualContext?: {
     context: string;
     reference_urls?: string[];
+    winner_seed?: {
+      caption: string;
+      engagement_rate: number;
+      impressions: number;
+      category: string;
+      format: string;
+    };
   };
 }
 
@@ -318,6 +325,19 @@ function buildUserMessage(ctx: GenerationContext): string {
     if (ctx.manualContext.reference_urls && ctx.manualContext.reference_urls.length) {
       parts.push(`\n## REFERENCE URLS (cite or link these in the post)`);
       parts.push(ctx.manualContext.reference_urls.map((u) => `- ${u}`).join("\n"));
+    }
+    // Winner seed — embed the high-performing reference post so Claude can
+    // mirror its opener style + stat-led structure without duplicating it.
+    if (ctx.manualContext.winner_seed) {
+      const w = ctx.manualContext.winner_seed;
+      parts.push(`\n## WINNER INSPIRATION (use as a model, don't copy)`);
+      parts.push(
+        `This past ${w.category}/${w.format} post performed well — ${w.engagement_rate}% engagement on ${w.impressions} impressions:`
+      );
+      parts.push("```\n" + w.caption + "\n```");
+      parts.push(
+        `Write a NEW ${w.category}/${w.format} post in the same opener style (same rhythm, same kind of hook) and same stat-led approach — but on a DIFFERENT angle. Don't reuse the exact stat or the exact framing. Pick a fresh stat from APPROVED STATS or EXTERNAL STATS and a fresh angle the brand hasn't covered.`
+      );
     }
   }
 

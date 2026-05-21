@@ -13,7 +13,8 @@ export type AuditAction =
   | "publish"
   | "fail"
   | "recycle"
-  | "delete";
+  | "delete"
+  | "suggest_from_winner";
 
 export interface AuditEntry {
   action: AuditAction;

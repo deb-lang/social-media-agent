@@ -40,6 +40,19 @@ export interface ManualContext {
   context: string;
   /** Optional reference URLs to embed/cite in the post */
   reference_urls?: string[];
+  /**
+   * Optional seed from a high-performing past post. When present, Claude
+   * is told to write in the same opener style + stat-led approach as the
+   * seed, but on a different angle (no shared stats or hooks).
+   * Used by the "suggest from winners" feature.
+   */
+  winner_seed?: {
+    caption: string;
+    engagement_rate: number;
+    impressions: number;
+    category: string;
+    format: string;
+  };
 }
 
 export interface BuildPostOpts {
