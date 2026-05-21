@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { getNextSlot } from "@/lib/scheduler";
+import { getNextBestSlot, getNextSlot } from "@/lib/scheduler";
 import { logAction } from "@/lib/audit";
 import { notifyApproved, notifyFailure, notifyPublishFailed } from "@/lib/slack";
 import {
@@ -60,13 +60,39 @@ export async function POST(
   //   1. post_now=true → fire ASAP (60s buffer satisfies Publer's
   //      "scheduled_at must be in the future" check)
   //   2. schedule_override=true → reviewer picked a slot, honor it
-  //   3. otherwise → next auto slot for the format (Tue / Thu)
+  //   3. otherwise → next BEST slot per getNextBestSlot (Publer heatmap →
+  //      curated B2B list → legacy fixed Tue 9 AM, in that order).
+  //      Format no longer matters — both image and carousel use the same
+  //      best-times pipeline.
   let scheduled_for = post.scheduled_for as string | null;
+  let scheduledForSource: "post_now" | "override" | "best-time" | "legacy-fixed" | "publer" | "curated" = "override";
   if (postNow) {
     scheduled_for = new Date(Date.now() + 60_000).toISOString();
+    scheduledForSource = "post_now";
   } else if (!post.schedule_override) {
     try {
-      scheduled_for = getNextSlot(post.format === "carousel" ? "thu" : "tue");
+      const linkedInAccountId = process.env.PUBLER_LINKEDIN_ACCOUNT_ID;
+      if (!linkedInAccountId) {
+        // Without an account id we can't query Publer; fall straight to legacy.
+        scheduled_for = getNextSlot("tue");
+        scheduledForSource = "legacy-fixed";
+      } else {
+        // Avoid stacking two posts at the same minute by excluding any
+        // already-scheduled-for timestamps.
+        const { data: taken } = await sb
+          .from("posts")
+          .select("scheduled_for")
+          .in("status", ["approved", "scheduled"])
+          .not("scheduled_for", "is", null);
+        const excludeIsoSlots = new Set(
+          (taken ?? [])
+            .map((r) => (r.scheduled_for as string | null) ?? null)
+            .filter((s): s is string => Boolean(s))
+        );
+        const best = await getNextBestSlot({ accountId: linkedInAccountId, excludeIsoSlots });
+        scheduled_for = best.iso;
+        scheduledForSource = best.source;
+      }
     } catch (err) {
       await notifyFailure({ context: "approve.scheduler", error: err, postId: id });
       return NextResponse.json(
@@ -100,6 +126,7 @@ export async function POST(
       scheduled_for,
       schedule_override: post.schedule_override,
       post_now: postNow,
+      scheduled_for_source: scheduledForSource,
     },
     ip_address: req.headers.get("x-forwarded-for") ?? null,
   });

@@ -376,6 +376,28 @@ export async function listPostInsights(opts: {
  * sync route uses this rather than poking by-post-id (which the API no
  * longer supports).
  */
+// ─── Best times to post (heatmap) ───────────────────────────
+// GET /analytics/{accountId}/best_times?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Returns { Monday: number[24], ..., Sunday: number[24] } — each day maps
+// to an array of 24 hourly engagement scores (higher = better posting time).
+// Scores are relative within the dataset; many will be 0 for accounts with
+// sparse posting history. Refreshed by Publer ~daily.
+
+export type DayName = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
+export type BestTimesHeatmap = Record<DayName, number[]>;
+
+export async function getBestTimes(opts: {
+  accountId: string;
+  from: string; // YYYY-MM-DD
+  to: string;
+}): Promise<BestTimesHeatmap> {
+  const params = new URLSearchParams({ from: opts.from, to: opts.to });
+  const { data } = await request<BestTimesHeatmap>(
+    `/analytics/${opts.accountId}/best_times?${params.toString()}`
+  );
+  return data;
+}
+
 export async function listAllPostInsights(opts: {
   accountId: string;
   from: string;

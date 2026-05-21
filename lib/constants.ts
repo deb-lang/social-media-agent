@@ -275,12 +275,39 @@ export const US_HOLIDAYS_2026 = [
 // Set GENERATION_RUN_DAYS="1,15" in .env or Vercel env. Default: 1,15.
 export const SCHEDULE_CONFIG = {
   timezone: "America/Los_Angeles",
-  // Post-publish schedule (applied at approval time): Tue 9 AM / Thu 10 AM PST.
+  // Post-publish schedule (legacy fallback applied at approval time when
+  // both Publer's best_times AND the curated list fail): Tue 9 AM / Thu 10 AM PST.
   tuesdayHour: 9,
   thursdayHour: 10,
   // Generation run hour (cron fires at this PST hour on the run days).
   generationRunHour: 8,
 } as const;
+
+// ─── Best-times fallback ─────────────────────────────────────
+// Ranked from best → worst based on established LinkedIn B2B research
+// (Hootsuite/Sprout Social/HubSpot benchmarks for 2024-2026). Used by
+// lib/best-times.ts when Publer's own /best_times heatmap is too sparse
+// to be trustworthy (< 10 non-zero slots — typically the first ~20 posts
+// of an account's history).
+//
+// `day` follows JS Date.getDay() convention: 0=Sun, 1=Mon, ..., 6=Sat
+// `hour` is local time in SCHEDULE_CONFIG.timezone (PT)
+export const CURATED_BEST_TIMES_B2B_LINKEDIN = [
+  { day: 3, hour: 10 }, // Wed 10 AM — widely cited as the single best slot
+  { day: 2, hour: 10 }, // Tue 10 AM
+  { day: 4, hour: 10 }, // Thu 10 AM
+  { day: 3, hour: 9 },  // Wed 9 AM
+  { day: 2, hour: 9 },  // Tue 9 AM
+  { day: 4, hour: 9 },  // Thu 9 AM
+  { day: 3, hour: 11 }, // Wed 11 AM
+  { day: 2, hour: 11 }, // Tue 11 AM
+  { day: 4, hour: 11 }, // Thu 11 AM
+  { day: 3, hour: 13 }, // Wed 1 PM (post-lunch refresh)
+  { day: 2, hour: 13 }, // Tue 1 PM
+  { day: 4, hour: 13 }, // Thu 1 PM
+  { day: 1, hour: 10 }, // Mon 10 AM (lower — Monday inertia)
+  { day: 5, hour: 10 }, // Fri 10 AM (lower — engagement drops Fri PM)
+] as const;
 
 export function getGenerationRunDays(): number[] {
   const raw = process.env.GENERATION_RUN_DAYS ?? "1,15";
