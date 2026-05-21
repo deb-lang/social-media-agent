@@ -148,10 +148,71 @@ export const StaticInsightContentSchema = z.object({
   source: z.string().min(1).max(120),
 });
 
+// ─── V2 static schemas (added 2026-05-22) ───────────────
+// Three additional template shapes from the second Claude Design bundle.
+// Match lib/templates/static-editorial.ts / static-ticker.ts / static-diptych.ts
+// props exactly so renderTemplate(...) accepts Claude's output directly.
+
+export const StaticEditorialContentSchema = z.object({
+  template: z.literal("static-editorial"),
+  publication: z.string().min(1).max(40).optional(),
+  publicationKicker: z.string().min(1).max(80).optional(),
+  issue: z.string().min(1).max(20).optional(),
+  issueDate: z.string().min(1).max(20).optional(),
+  featureBadge: z.string().min(1).max(4).optional(),
+  featureLabel: z.string().min(1).max(60).optional(),
+  preHeadline: z.string().min(1).max(40).optional(),
+  headline: z.string().min(8).max(120),
+  headlineEmphasisWord: z.string().min(1).max(30).optional(),
+  dek: z.string().min(40).max(420),
+  authorInitials: z.string().min(1).max(4).optional(),
+  authorName: z.string().min(1).max(60).optional(),
+  photographer: z.string().min(1).max(60).optional(),
+});
+
+const TickerMetricSchema = z.object({
+  label: z.string().min(1).max(60),
+  value: z.string().min(1).max(20),
+  delta: z.string().min(1).max(20).optional(),
+});
+
+export const StaticTickerContentSchema = z.object({
+  template: z.literal("static-ticker"),
+  statusLabel: z.string().min(1).max(80).optional(),
+  period: z.string().min(1).max(20).optional(),
+  metricLabel: z.string().min(1).max(40).optional(),
+  cadence: z.string().min(1).max(40).optional(),
+  heroValue: z.string().min(1).max(16),
+  heroDelta: z.string().min(1).max(20).optional(),
+  headline: z.string().min(20).max(180),
+  metrics: z.array(TickerMetricSchema).length(4).optional(),
+});
+
+const DiptychTileSchema = z.object({
+  tone: z.enum(["dark", "light"]),
+  eyebrow: z.string().min(1).max(40),
+  stat: z.string().min(1).max(12),
+  statLabel: z.string().min(1).max(60),
+  headline: z.string().min(10).max(120),
+  body: z.string().min(20).max(220).optional(),
+});
+
+export const StaticDiptychContentSchema = z.object({
+  template: z.literal("static-diptych"),
+  left: DiptychTileSchema,
+  right: DiptychTileSchema,
+  vsLabel: z.string().min(1).max(6).optional(),
+  source: z.string().min(1).max(120).optional(),
+  brandUrl: z.string().min(1).max(60).optional(),
+});
+
 export const StaticTemplateContentSchema = z.discriminatedUnion("template", [
   StaticQuoteContentSchema,
   StaticStatContentSchema,
   StaticInsightContentSchema,
+  StaticEditorialContentSchema,
+  StaticTickerContentSchema,
+  StaticDiptychContentSchema,
 ]);
 
 // Carousel slide content — 5 distinct slide types in fixed order.
@@ -476,7 +537,13 @@ export async function generateCarouselPost(ctx: GenerationContext): Promise<{
 // preselectedTemplate so Claude knows which discriminator branch to fill.
 
 export interface GenerateImageV2Opts extends GenerationContext {
-  preselectedTemplate: "static-quote" | "static-stat" | "static-insight";
+  preselectedTemplate:
+    | "static-quote"
+    | "static-stat"
+    | "static-insight"
+    | "static-editorial"
+    | "static-ticker"
+    | "static-diptych";
   preselectedTone?: "dark" | "teal" | "light" | "split";
 }
 

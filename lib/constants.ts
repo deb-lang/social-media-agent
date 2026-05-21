@@ -137,10 +137,9 @@ comprehensive · cutting-edge · revolutionary · revolutionize · transform · 
 - 4-5 relevant hashtags at the very end. Never embed hashtags in body text.
 - Emojis: max 1-2, only if natural. NO emojis in stat posts.
 
-# IMAGE TEMPLATES (V2 — Claude Design system)
-Each post is rendered through one of these eight templates. The orchestrator
-TELLS YOU WHICH TEMPLATE TO USE via a "# TEMPLATE" block in the user message.
-Fill the JSON discriminator branch that matches.
+# IMAGE TEMPLATES (Claude Design system — six static templates + one 5-slide carousel)
+The orchestrator TELLS YOU WHICH TEMPLATE TO USE via a "# TEMPLATE" block in
+the user message. Fill the JSON discriminator branch that matches.
 
 STATIC POSTS (1080x1080):
 - "static-quote" (tone: dark / teal / light) — testimonial or third-party quote
@@ -149,6 +148,15 @@ STATIC POSTS (1080x1080):
   Props: tone, eyebrow, prefix? (e.g. "+"), value (e.g. "69%", "3.2x", "133.5"), suffix?, headline (20-180 chars), source (1-120)
 - "static-insight" — research takeaway with 3 supporting tiles
   Props: eyebrow, headline (sets up the insight), emphasis (gradient-highlighted phrase), trail (what follows the emphasis), bullets (exactly 3 of {value, label}), source
+- "static-editorial" — long-form essay layout, masthead + giant headline + dek
+  Use for: thought leadership and perfectpatient posts that read like a magazine feature
+  Props: publication? (default "The Partner"), publicationKicker? (e.g. "A PatientPartner Bulletin"), issue? (e.g. "ISSUE 014"), issueDate? (e.g. "MAY · 2026"), featureBadge? (single letter like "F"), featureLabel? (e.g. "Feature story · 8 min read"), preHeadline? (small teal italic line like "The case for"), headline (giant editorial line, 8-120 chars), headlineEmphasisWord? (one word inside headline to italicize), dek (1-3 sentence subtitle, 40-420 chars), authorInitials? (e.g. "RP"), authorName? (e.g. "By Dr. Reema Patel"), photographer? (e.g. "Photography · Linh Tran")
+- "static-ticker" — live-dashboard layout, hero number + 4 supporting metrics
+  Use for: data-heavy stat posts that show momentum at a glance
+  Props: statusLabel? (default "LIVE · PATIENTPARTNER OUTCOMES NETWORK"), period? (e.g. "FY26 · Q2"), metricLabel? (e.g. "METRIC · 001"), cadence? (e.g. "updated daily"), heroValue (the big number, 1-16 chars), heroDelta? (e.g. "↑ 12.4%"), headline (20-180 chars), metrics (exactly 4 of {label, value, delta?})
+- "static-diptych" — side-by-side comparison: dark tile (negative) vs light tile (positive)
+  Use for: missing_middle (gap framing), lead_magnet (before/after), or any "without us vs with us" angle
+  Props: left ({ tone:"dark", eyebrow, stat, statLabel, headline, body? }), right ({ tone:"light", eyebrow, stat, statLabel, headline, body? }), vsLabel? (default "vs"), source?, brandUrl? (default "patientpartner.com")
 
 CAROUSEL (5 slides, fixed order):
 1. cover     — { eyebrow, title (8-80), subtitle (8-140) }

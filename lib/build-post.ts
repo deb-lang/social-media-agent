@@ -171,16 +171,35 @@ export async function buildOnePost(opts: BuildPostOpts): Promise<string> {
   let carousel_slide_previews: string[] | null = null;
 
   if (generated.format === "image") {
-    // Render the chosen template (StaticQuote / StaticStat / StaticInsight)
-    // via Puppeteer + headless Chromium to a 1080×1080 PNG.
+    // Render the chosen template via Puppeteer + headless Chromium → 1080×1080 PNG.
+    // 6 templates now in rotation: v1 (quote/stat/insight) + v2 (editorial/ticker/diptych).
+    // The Claude content `c` is a discriminated union — its `template` field
+    // tells us which renderTemplate branch to take.
     const c = generated.content;
     let html: string;
-    if (c.template === "static-quote") {
-      html = renderTemplate({ template: "static-quote", props: c });
-    } else if (c.template === "static-stat") {
-      html = renderTemplate({ template: "static-stat", props: c });
-    } else {
-      html = renderTemplate({ template: "static-insight", props: c });
+    switch (c.template) {
+      case "static-quote":
+        html = renderTemplate({ template: "static-quote", props: c });
+        break;
+      case "static-stat":
+        html = renderTemplate({ template: "static-stat", props: c });
+        break;
+      case "static-insight":
+        html = renderTemplate({ template: "static-insight", props: c });
+        break;
+      case "static-editorial":
+        html = renderTemplate({ template: "static-editorial", props: c });
+        break;
+      case "static-ticker":
+        html = renderTemplate({ template: "static-ticker", props: c });
+        break;
+      case "static-diptych":
+        html = renderTemplate({ template: "static-diptych", props: c });
+        break;
+      default: {
+        const exhaustive: never = c;
+        throw new Error(`Unhandled static template: ${JSON.stringify(exhaustive).slice(0, 80)}`);
+      }
     }
     const png = await renderHtmlToPng(html);
     image_url = await uploadImagePng(png, { category, runId: run_id });
