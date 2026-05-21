@@ -289,11 +289,37 @@ export const CarouselContentSchema = z.object({
 });
 
 // V2 wrapper schemas — caption + hashtags + template content.
+// The "open" image schema lets type inference work everywhere — actual
+// per-call schemas are built via imagePostSchemaFor() to keep Anthropic's
+// compiled grammar small (a 6-way union of optional fields blows past the
+// "grammar too large" limit).
 export const ImagePostV2Schema = z.object({
   ...PostShared,
   format: z.literal("image"),
   content: StaticTemplateContentSchema,
 });
+
+// Per-template image schemas — used at generation time so Claude only sees
+// the ONE schema it's expected to fill. Keeps the compiled grammar tiny
+// and dodges Anthropic's "grammar too large" 400.
+const STATIC_TEMPLATE_SCHEMAS = {
+  "static-quote": StaticQuoteContentSchema,
+  "static-stat": StaticStatContentSchema,
+  "static-insight": StaticInsightContentSchema,
+  "static-editorial": StaticEditorialContentSchema,
+  "static-ticker": StaticTickerContentSchema,
+  "static-diptych": StaticDiptychContentSchema,
+} as const;
+
+export function imagePostSchemaFor(
+  template: keyof typeof STATIC_TEMPLATE_SCHEMAS
+) {
+  return z.object({
+    ...PostShared,
+    format: z.literal("image"),
+    content: STATIC_TEMPLATE_SCHEMAS[template],
+  });
+}
 
 export const CarouselPostV2Schema = z.object({
   ...PostShared,
@@ -575,13 +601,17 @@ export async function generateImagePostV2(opts: GenerateImageV2Opts): Promise<{
   if (opts.format !== "image") throw new Error("generateImagePostV2 requires format='image'");
   console.log(`[claude:imageV2] starting · template=${opts.preselectedTemplate} · tone=${opts.preselectedTone ?? "—"} · category=${opts.category}`);
   const t0 = Date.now();
+  // Single-template schema instead of the full discriminated union — keeps
+  // Anthropic's compiled JSON-schema grammar small. The caller already knows
+  // which template to fill, so the union adds no value here.
+  const perTemplateSchema = imagePostSchemaFor(opts.preselectedTemplate);
   const res = await client().messages.parse({
     model: CLAUDE_MODEL,
     max_tokens: 4096,
     thinking: { type: "adaptive" },
     output_config: {
       effort: "high",
-      format: zodOutputFormat(ImagePostV2Schema),
+      format: zodOutputFormat(perTemplateSchema),
     },
     system: systemBlocks(),
     messages: [{ role: "user", content: buildV2UserMessage(opts) }],
