@@ -149,43 +149,34 @@ export const StaticInsightContentSchema = z.object({
 });
 
 // ─── V2 static schemas (added 2026-05-22) ───────────────
-// Three additional template shapes from the second Claude Design bundle.
-// Match lib/templates/static-editorial.ts / static-ticker.ts / static-diptych.ts
-// props exactly so renderTemplate(...) accepts Claude's output directly.
+// Kept INTENTIONALLY MINIMAL — Anthropic's structured-output grammar
+// compiler rejects schemas above a complexity threshold with "Schema is
+// too complex". v2 templates have 10+ optional masthead/byline/etc fields;
+// we omit them here and let the template TS code (lib/templates/*.ts) fill
+// defaults at render time. Claude only fills the editorial/dashboard
+// essentials.
 
 export const StaticEditorialContentSchema = z.object({
   template: z.literal("static-editorial"),
-  publication: z.string().min(1).max(40).optional(),
-  publicationKicker: z.string().min(1).max(80).optional(),
-  issue: z.string().min(1).max(20).optional(),
-  issueDate: z.string().min(1).max(20).optional(),
-  featureBadge: z.string().min(1).max(4).optional(),
-  featureLabel: z.string().min(1).max(60).optional(),
-  preHeadline: z.string().min(1).max(40).optional(),
+  preHeadline: z.string().min(1).max(40),
   headline: z.string().min(8).max(120),
-  headlineEmphasisWord: z.string().min(1).max(30).optional(),
+  headlineEmphasisWord: z.string().min(1).max(30),
   dek: z.string().min(40).max(420),
-  authorInitials: z.string().min(1).max(4).optional(),
-  authorName: z.string().min(1).max(60).optional(),
-  photographer: z.string().min(1).max(60).optional(),
+  authorName: z.string().min(1).max(60),
 });
 
 const TickerMetricSchema = z.object({
   label: z.string().min(1).max(60),
   value: z.string().min(1).max(20),
-  delta: z.string().min(1).max(20).optional(),
+  delta: z.string().min(1).max(20),
 });
 
 export const StaticTickerContentSchema = z.object({
   template: z.literal("static-ticker"),
-  statusLabel: z.string().min(1).max(80).optional(),
-  period: z.string().min(1).max(20).optional(),
-  metricLabel: z.string().min(1).max(40).optional(),
-  cadence: z.string().min(1).max(40).optional(),
   heroValue: z.string().min(1).max(16),
-  heroDelta: z.string().min(1).max(20).optional(),
+  heroDelta: z.string().min(1).max(20),
   headline: z.string().min(20).max(180),
-  metrics: z.array(TickerMetricSchema).length(4).optional(),
+  metrics: z.array(TickerMetricSchema).length(4),
 });
 
 const DiptychTileSchema = z.object({
@@ -194,16 +185,13 @@ const DiptychTileSchema = z.object({
   stat: z.string().min(1).max(12),
   statLabel: z.string().min(1).max(60),
   headline: z.string().min(10).max(120),
-  body: z.string().min(20).max(220).optional(),
 });
 
 export const StaticDiptychContentSchema = z.object({
   template: z.literal("static-diptych"),
   left: DiptychTileSchema,
   right: DiptychTileSchema,
-  vsLabel: z.string().min(1).max(6).optional(),
-  source: z.string().min(1).max(120).optional(),
-  brandUrl: z.string().min(1).max(60).optional(),
+  source: z.string().min(1).max(120),
 });
 
 export const StaticTemplateContentSchema = z.discriminatedUnion("template", [
